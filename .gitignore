@@ -24,7 +24,6 @@ Thumbs.db
 
 # Temporary output
 /tmp/
-*.lua
 
 # Keep example preview PNGs
 !docs/examples/*.png
