@@ -1,0 +1,34 @@
+# Build artifacts
+.gradle/
+build/
+.kotlin/
+*.class
+*.jar
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+.pytest_cache/
+*.whl
+
+# IDEs
+.idea/
+.vscode/
+*.iml
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary output
+/tmp/
+*.lua
+
+# Keep example preview PNGs
+!docs/examples/*.png
+!scenes/*.png
+
+# Vendored reference repos (kept locally, not committed)
+/vendor/

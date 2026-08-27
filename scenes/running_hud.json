@@ -1,0 +1,23 @@
+{
+  "version": "1.0",
+  "device": "halo",
+  "mode": "repl",
+  "scene": {
+    "width": 256,
+    "height": 256,
+    "bg": "#000000",
+    "brightness": 50,
+    "power_save": false,
+    "children": [
+      { "type": "circle", "cx": 128, "cy": 128, "r": 125, "color": "#0050A0", "filled": false },
+      { "type": "circle", "cx": 128, "cy": 128, "r": 122, "color": "#002060", "filled": false },
+      { "type": "text", "x": 108, "y": 30, "text": "145", "font": 0, "size": 16, "color": "#FF4444" },
+      { "type": "circle", "cx": 100, "cy": 38, "r": 4, "color": "#FF4444", "filled": true },
+      { "type": "text", "x": 78, "y": 90, "text": "5:30", "font": 1, "size": 32, "color": "#FFFFFF" },
+      { "type": "text", "x": 96, "y": 130, "text": "/km", "font": 0, "size": 16, "color": "#808080" },
+      { "type": "text", "x": 96, "y": 165, "text": "2.5km", "font": 0, "size": 16, "color": "#44FF44" },
+      { "type": "text", "x": 96, "y": 190, "text": "12:34", "font": 0, "size": 16, "color": "#FFFFFF" },
+      { "type": "line", "x0": 50, "y0": 155, "x1": 206, "y1": 155, "color": "#303030" }
+    ]
+  }
+}

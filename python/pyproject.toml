@@ -1,0 +1,22 @@
+[project]
+name = "halo-engine"
+version = "0.1.0"
+description = "Halo Graphic Engine — compile and preview visuals for Brilliant Labs Halo smart glasses"
+requires-python = ">=3.10"
+dependencies = [
+    "halo-emulator>=2.0.1",
+    "Pillow>=10.0",
+    "numpy>=1.26",
+    "lz4>=4.0",
+    "mcp>=2.0",
+]
+
+[project.scripts]
+halo-engine-compile = "halo_engine.compile:main"
+halo-engine-preview = "halo_engine.preview:main"
+halo-engine-hrp = "halo_engine.hrp_compile:main"
+halo-engine-mcp = "halo_engine.mcp_server:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"

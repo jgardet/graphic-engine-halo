@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "device": "halo",
+  "mode": "repl",
+  "scene": {
+    "width": 256,
+    "height": 256,
+    "bg": "#000000",
+    "brightness": 80,
+    "children": [
+      {"type": "circle", "cx": 128, "cy": 128, "r": 104, "color": "#1A1A2E", "filled": true},
+      {"type": "sprite", "src": "scenes/venus_detail_200.png", "x": 28, "y": 28, "w": 200, "h": 200, "bpp": 4},
+      {"type": "circle", "cx": 128, "cy": 128, "r": 104, "color": "#C0A060", "filled": false},
+      {"type": "text", "x": 56, "y": 234, "text": "Botticelli - Venus", "font": 0, "size": 8, "color": "#C0A060"}
+    ]
+  }
+}

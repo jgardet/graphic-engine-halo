@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "device": "halo",
+  "mode": "repl",
+  "scene": {
+    "width": 256,
+    "height": 256,
+    "bg": "#000000",
+    "children": [
+      { "type": "sprite", "src": "/tmp/icon.png", "x": 96, "y": 96, "w": 64, "h": 64, "bpp": 4 }
+    ]
+  }
+}

@@ -1,0 +1,17 @@
+{
+  "version": "1.0",
+  "device": "halo",
+  "mode": "repl",
+  "scene": {
+    "width": 256,
+    "height": 256,
+    "bg": "#000000",
+    "children": [
+      { "type": "circle", "cx": 128, "cy": 128, "r": 124, "color": "#303030", "filled": false },
+      { "type": "text", "x": 72, "y": 32, "text": "300 m", "font": 1, "size": 24, "color": "#FFFFFF" },
+      { "type": "text", "x": 56, "y": 120, "text": "Main St", "font": 1, "size": 24, "color": "#44AAFF" },
+      { "type": "polygon", "points": [[120,190],[136,190],[128,170]], "color": "#44FF44" },
+      { "type": "line", "x0": 128, "y0": 190, "x1": 128, "y1": 220, "color": "#44FF44" }
+    ]
+  }
+}

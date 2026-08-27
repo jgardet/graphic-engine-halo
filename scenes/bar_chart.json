@@ -1,0 +1,53 @@
+{
+  "version": "1.0",
+  "device": "halo",
+  "mode": "repl",
+  "scene": {
+    "width": 256,
+    "height": 256,
+    "bg": "#0A0A12",
+    "brightness": 60,
+    "children": [
+      {"type": "text", "x": 60, "y": 20, "text": "Revenue", "font": 1, "size": 16, "color": "#FFFFFF"},
+
+      {"type": "line", "x0": 40, "y0": 200, "x1": 220, "y1": 200, "color": "#37474F"},
+      {"type": "line", "x0": 40, "y0": 50, "x1": 40, "y1": 200, "color": "#37474F"},
+
+      {"type": "line", "x0": 38, "y0": 60, "x1": 42, "y1": 60, "color": "#546E7A"},
+      {"type": "text", "x": 14, "y": 56, "text": "20k", "font": 0, "size": 8, "color": "#78909C"},
+      {"type": "line", "x0": 38, "y0": 100, "x1": 42, "y1": 100, "color": "#546E7A"},
+      {"type": "text", "x": 14, "y": 96, "text": "15k", "font": 0, "size": 8, "color": "#78909C"},
+      {"type": "line", "x0": 38, "y0": 140, "x1": 42, "y1": 140, "color": "#546E7A"},
+      {"type": "text", "x": 14, "y": 136, "text": "10k", "font": 0, "size": 8, "color": "#78909C"},
+      {"type": "line", "x0": 38, "y0": 180, "x1": 42, "y1": 180, "color": "#546E7A"},
+      {"type": "text", "x": 20, "y": 176, "text": "5k", "font": 0, "size": 8, "color": "#78909C"},
+
+      {"type": "line", "x0": 40, "y0": 60, "x1": 220, "y1": 60, "color": "#1A237E"},
+      {"type": "line", "x0": 40, "y0": 100, "x1": 220, "y1": 100, "color": "#1A237E"},
+      {"type": "line", "x0": 40, "y0": 140, "x1": 220, "y1": 140, "color": "#1A237E"},
+      {"type": "line", "x0": 40, "y0": 180, "x1": 220, "y1": 180, "color": "#1A237E"},
+
+      {"type": "rect", "x": 56, "y": 136, "w": 28, "h": 64, "color": "#42A5F5", "filled": true},
+      {"type": "rect", "x": 56, "y": 136, "w": 28, "h": 64, "color": "#82B1FF", "filled": false},
+      {"type": "text", "x": 60, "y": 210, "text": "Q1", "font": 0, "size": 8, "color": "#90A4AE"},
+      {"type": "text", "x": 60, "y": 128, "text": "8k", "font": 0, "size": 8, "color": "#82B1FF"},
+
+      {"type": "rect", "x": 100, "y": 104, "w": 28, "h": 96, "color": "#66BB6A", "filled": true},
+      {"type": "rect", "x": 100, "y": 104, "w": 28, "h": 96, "color": "#A5D6A7", "filled": false},
+      {"type": "text", "x": 104, "y": 210, "text": "Q2", "font": 0, "size": 8, "color": "#90A4AE"},
+      {"type": "text", "x": 100, "y": 96, "text": "12k", "font": 0, "size": 8, "color": "#A5D6A7"},
+
+      {"type": "rect", "x": 144, "y": 72, "w": 28, "h": 128, "color": "#FFA726", "filled": true},
+      {"type": "rect", "x": 144, "y": 72, "w": 28, "h": 128, "color": "#FFCC80", "filled": false},
+      {"type": "text", "x": 148, "y": 210, "text": "Q3", "font": 0, "size": 8, "color": "#90A4AE"},
+      {"type": "text", "x": 148, "y": 64, "text": "16k", "font": 0, "size": 8, "color": "#FFCC80"},
+
+      {"type": "rect", "x": 188, "y": 88, "w": 28, "h": 112, "color": "#EF5350", "filled": true},
+      {"type": "rect", "x": 188, "y": 88, "w": 28, "h": 112, "color": "#EF9A9A", "filled": false},
+      {"type": "text", "x": 192, "y": 210, "text": "Q4", "font": 0, "size": 8, "color": "#90A4AE"},
+      {"type": "text", "x": 192, "y": 80, "text": "14k", "font": 0, "size": 8, "color": "#EF9A9A"},
+
+      {"type": "text", "x": 80, "y": 230, "text": "Quarterly 2024", "font": 0, "size": 8, "color": "#546E7A"}
+    ]
+  }
+}
