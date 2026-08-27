@@ -1,0 +1,52 @@
+{
+  "version": "1.0",
+  "device": "halo",
+  "mode": "repl",
+  "scene": {
+    "width": 256,
+    "height": 256,
+    "bg": "#0D0D0D",
+    "brightness": 60,
+    "children": [
+      {"type": "rect", "x": 28, "y": 28, "w": 200, "h": 200, "color": "#1A1A2E", "filled": true},
+
+      {"type": "rect", "x": 28, "y": 28, "w": 200, "h": 24, "color": "#16213E", "filled": true},
+      {"type": "text", "x": 36, "y": 34, "text": "Q1", "font": 1, "size": 16, "color": "#4FC3F7"},
+      {"type": "text", "x": 84, "y": 34, "text": "Q2", "font": 1, "size": 16, "color": "#4FC3F7"},
+      {"type": "text", "x": 132, "y": 34, "text": "Q3", "font": 1, "size": 16, "color": "#4FC3F7"},
+      {"type": "text", "x": 180, "y": 34, "text": "Q4", "font": 1, "size": 16, "color": "#4FC3F7"},
+
+      {"type": "text", "x": 36, "y": 66, "text": "Rev", "font": 0, "size": 16, "color": "#90A4AE"},
+      {"type": "text", "x": 80, "y": 66, "text": "12k", "font": 0, "size": 16, "color": "#FFFFFF"},
+      {"type": "text", "x": 128, "y": 66, "text": "15k", "font": 0, "size": 16, "color": "#FFFFFF"},
+      {"type": "text", "x": 176, "y": 66, "text": "18k", "font": 0, "size": 16, "color": "#FFFFFF"},
+
+      {"type": "text", "x": 36, "y": 98, "text": "Cst", "font": 0, "size": 16, "color": "#90A4AE"},
+      {"type": "text", "x": 80, "y": 98, "text": "8k", "font": 0, "size": 16, "color": "#FF8A65"},
+      {"type": "text", "x": 128, "y": 98, "text": "9k", "font": 0, "size": 16, "color": "#FF8A65"},
+      {"type": "text", "x": 176, "y": 98, "text": "7k", "font": 0, "size": 16, "color": "#FF8A65"},
+
+      {"type": "text", "x": 36, "y": 130, "text": "Net", "font": 0, "size": 16, "color": "#90A4AE"},
+      {"type": "text", "x": 80, "y": 130, "text": "4k", "font": 0, "size": 16, "color": "#66BB6A"},
+      {"type": "text", "x": 128, "y": 130, "text": "6k", "font": 0, "size": 16, "color": "#66BB6A"},
+      {"type": "text", "x": 176, "y": 130, "text": "11k", "font": 0, "size": 16, "color": "#66BB6A"},
+
+      {"type": "rect", "x": 28, "y": 160, "w": 200, "h": 24, "color": "#0D1B2A", "filled": true},
+      {"type": "text", "x": 36, "y": 166, "text": "TOT", "font": 1, "size": 16, "color": "#FFD54F"},
+      {"type": "text", "x": 168, "y": 166, "text": "21k", "font": 1, "size": 16, "color": "#FFD54F"},
+
+      {"type": "line", "x0": 28, "y0": 52, "x1": 228, "y1": 52, "color": "#37474F"},
+      {"type": "line", "x0": 28, "y0": 88, "x1": 228, "y1": 88, "color": "#263238"},
+      {"type": "line", "x0": 28, "y0": 120, "x1": 228, "y1": 120, "color": "#263238"},
+      {"type": "line", "x0": 28, "y0": 152, "x1": 228, "y1": 152, "color": "#263238"},
+      {"type": "line", "x0": 28, "y0": 184, "x1": 228, "y1": 184, "color": "#37474F"},
+
+      {"type": "line", "x0": 76, "y0": 28, "x1": 76, "y1": 184, "color": "#263238"},
+      {"type": "line", "x0": 124, "y0": 28, "x1": 124, "y1": 184, "color": "#263238"},
+      {"type": "line", "x0": 172, "y0": 28, "x1": 172, "y1": 184, "color": "#263238"},
+
+      {"type": "rect", "x": 28, "y": 28, "w": 200, "h": 156, "color": "#4FC3F7", "filled": false},
+      {"type": "text", "x": 84, "y": 200, "text": "FY2024", "font": 0, "size": 16, "color": "#78909C"}
+    ]
+  }
+}
