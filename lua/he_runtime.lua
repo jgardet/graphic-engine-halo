@@ -2,6 +2,10 @@
 -- HRP is transported through the official data.lua message framing.
 
 local HRP_CODE = 0x60
+local CLICK_CODE = 0x0B
+local TAP_CODE = 0x09
+local STATUS_CODE = 0x70
+local ERROR_CODE = 0x71
 local MAX_HRP_BYTES = 32768
 
 -- Minimal local equivalent of the official data.lua framing. Keeping this
@@ -10,7 +14,12 @@ local pending = {}
 local completed = {}
 local completed_count = 0
 
+local function send_event(code, payload)
+    pcall(frame.bluetooth.send, string.char(code) .. (payload or ''))
+end
+
 local function receive_data(packet)
+    if packet == nil or #packet < 1 then return end
     local flag = string.byte(packet, 1)
     local item = pending[flag]
     if item == nil then
@@ -18,7 +27,17 @@ local function receive_data(packet)
         pending[flag] = item
     end
     if item.received == 0 then
+        if #packet < 3 then
+            pending[flag] = nil
+            send_event(ERROR_CODE, 'invalid first packet')
+            return
+        end
         item.size = string.byte(packet, 2) << 8 | string.byte(packet, 3)
+        if item.size > MAX_HRP_BYTES then
+            pending[flag] = nil
+            send_event(ERROR_CODE, 'message exceeds runtime limit')
+            return
+        end
         item.chunks[1] = string.sub(packet, 4)
         item.received = #packet - 3
     else
@@ -28,9 +47,13 @@ local function receive_data(packet)
     if item.received == item.size then
         completed_count = completed_count + 1
         completed[completed_count] = { flag, table.concat(item.chunks) }
-        pending[flag] = { size = 0, received = 0, chunks = {} }
+        pending[flag] = nil
+    elseif item.received > item.size then
+        pending[flag] = nil
+        send_event(ERROR_CODE, 'message length overflow')
+        return
     end
-    pcall(frame.bluetooth.send, '\\x01\\x00\\x00')
+    pcall(frame.bluetooth.send, '\x01\x00\x00')
 end
 
 local function process_raw_items()
@@ -176,7 +199,15 @@ local function execute(payload)
     collectgarbage('collect')
 end
 
+frame.button.single(function() send_event(CLICK_CODE, string.char(1)) end)
+frame.button.double(function() send_event(CLICK_CODE, string.char(2)) end)
+frame.button.long(function() send_event(CLICK_CODE, string.char(3)) end)
+frame.imu.tap_callback(function(kind)
+    local codes = { single = 1, double = 2, triple = 3 }
+    send_event(TAP_CODE, string.char(codes[kind] or 1))
+end)
 frame.display.power_save(false)
+send_event(STATUS_CODE, 'HRP1;primitives,sprites,click,tap')
 print('Halo Engine HRP ready')
 
 while true do
@@ -190,7 +221,7 @@ while true do
         frame.sleep(0.001)
     end)
     if not ok then
+        send_event(ERROR_CODE, tostring(err))
         print(err)
-        break
     end
 end

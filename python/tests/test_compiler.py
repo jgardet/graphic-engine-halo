@@ -33,6 +33,17 @@ def test_compile_repl_contains_expected_calls():
     assert "print('ok')" in lua
 
 
+def test_row_offsets_are_applied_once():
+    scene = {
+        "scene": {
+            "children": [
+                {"type": "row", "x": 10, "y": 20, "children": [{"type": "point", "x": 1, "y": 2, "color": "#FFFFFF"}]}
+            ]
+        }
+    }
+    assert "frame.display.set_pixel(12,23,0xFFFFFF)" in compile_scene(scene)
+
+
 def test_compile_preview_renders():
     lua = compile_scene(SCENE)
     img, lines = preview_lua(lua)
