@@ -7,7 +7,6 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothStatusCodes
-import android.os.Build
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -230,14 +229,10 @@ class BluetoothGattChannel(
         }
         val descriptor = requireNotNull(rx.getDescriptor(CCCD_UUID)) { "Halo notification descriptor is missing" }
         check(gatt.setCharacteristicNotification(rx, true)) { "Unable to enable Halo notifications" }
-        val accepted = if (Build.VERSION.SDK_INT >= 33) {
-            gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == BluetoothStatusCodes.SUCCESS
-        } else {
-            @Suppress("DEPRECATION")
-            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            @Suppress("DEPRECATION")
-            gatt.writeDescriptor(descriptor)
-        }
+        val accepted = gatt.writeDescriptor(
+            descriptor,
+            BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
+        ) == BluetoothStatusCodes.SUCCESS
         check(accepted) { "BluetoothGatt rejected notification descriptor write" }
         check(withTimeout(5_000) { descriptorResults.receive() } == BluetoothGatt.GATT_SUCCESS) {
             "Halo notification descriptor write failed"
@@ -256,22 +251,15 @@ class BluetoothGattChannel(
     }
 
     override suspend fun requestConnectionPriority(priority: Int): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-            gatt.requestConnectionPriority(priority)
-        } else {
-            false
-        }
+        return gatt.requestConnectionPriority(priority)
     }
 
     override suspend fun write(bytes: ByteArray) {
-        val accepted = if (Build.VERSION.SDK_INT >= 33) {
-            gatt.writeCharacteristic(tx, bytes, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) == BluetoothStatusCodes.SUCCESS
-        } else {
-            @Suppress("DEPRECATION")
-            tx.value = bytes
-            @Suppress("DEPRECATION")
-            gatt.writeCharacteristic(tx)
-        }
+        val accepted = gatt.writeCharacteristic(
+            tx,
+            bytes,
+            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
+        ) == BluetoothStatusCodes.SUCCESS
         check(accepted) { "BluetoothGatt rejected write" }
         val status = withTimeout(5_000) { writeResults.receive() }
         check(status == BluetoothGatt.GATT_SUCCESS) { "Halo write failed: $status" }
@@ -280,15 +268,11 @@ class BluetoothGattChannel(
     override suspend fun writeAudio(bytes: ByteArray) {
         val audio = audioTx ?: throw IllegalStateException("AUDIO_TX is not available on this device")
         require(bytes.size <= mtu - 3) { "Audio frame ${bytes.size} exceeds MTU payload ${mtu - 3}" }
-        val accepted = if (Build.VERSION.SDK_INT >= 33) {
-            gatt.writeCharacteristic(audio, bytes, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) == BluetoothStatusCodes.SUCCESS
-        } else {
-            @Suppress("DEPRECATION")
-            audio.value = bytes
-            @Suppress("DEPRECATION")
-            audio.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
-            gatt.writeCharacteristic(audio)
-        }
+        val accepted = gatt.writeCharacteristic(
+            audio,
+            bytes,
+            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
+        ) == BluetoothStatusCodes.SUCCESS
         check(accepted) { "BluetoothGatt rejected AUDIO_TX write" }
         val status = withTimeout(5_000) { writeResults.receive() }
         check(status == BluetoothGatt.GATT_SUCCESS) { "Halo AUDIO_TX write failed: $status" }
