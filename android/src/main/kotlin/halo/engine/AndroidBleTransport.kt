@@ -211,11 +211,6 @@ class BluetoothGattChannel(
             channel?.descriptorResults?.trySend(status)
         }
 
-        @Deprecated("Use the API 33 callback on Android 13+")
-        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-            channel?.notifications?.trySend(characteristic.value ?: byteArrayOf())
-        }
-
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
             channel?.notifications?.trySend(value.copyOf())
         }

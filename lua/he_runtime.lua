@@ -211,7 +211,6 @@ end
 -- State for streaming features.
 local micStreaming = false
 local micConfig = {}
-local speakerStreaming = false
 local photoPending = nil
 
 -- Display helpers.
@@ -359,11 +358,8 @@ local function handle_message(code, payload)
         if not ok then
             print('speaker start error: ' .. tostring(err))
             send_event(ERROR_CODE, 'speaker start failed')
-        else
-            speakerStreaming = true
         end
     elseif code == SPEAKER_STOP then
-        speakerStreaming = false
         pcall(frame.speaker.stop)
     elseif code == CAPTURE_PHOTO then
         if photoPending then return end
@@ -385,7 +381,7 @@ local function handle_message(code, payload)
         if raw then cfg.raw = true end
         local ok, err = pcall(frame.camera.capture, cfg)
         if ok then
-            photoPending = { resolution = resolution, quality = quality, raw = raw }
+            photoPending = true
         else
             print('camera capture error: ' .. tostring(err))
             send_event(ERROR_CODE, 'camera capture failed')
