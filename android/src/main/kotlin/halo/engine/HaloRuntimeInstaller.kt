@@ -13,7 +13,7 @@ class HaloRuntimeInstaller(
     private val runtimeFileName: String = "halo_engine.lua",
 ) {
     suspend fun installAndStart(source: String, timeoutMs: Long = 10_000): String = coroutineScope {
-        transport.sendControl(0x03.toByte())
+        transport.sendControl(HaloProtocol.LUA_CTRL_INTERRUPT.toByte())
         delay(200)
         upload(source)
         val ready = async(start = CoroutineStart.UNDISPATCHED) {

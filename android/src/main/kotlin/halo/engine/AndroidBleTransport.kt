@@ -129,7 +129,7 @@ class AndroidBleTransport(
     private suspend fun sendDataPacket(packet: ByteArray) {
         require(packet.size <= maxDataPayload)
         while (router.acknowledgements.tryReceive().isSuccess) Unit
-        channel.write(byteArrayOf(DATA_MARKER) + packet)
+        channel.write(byteArrayOf(HaloProtocol.LUA_CTRL_DATA_MARKER.toByte()) + packet)
         val ack = try {
             withTimeout(ackTimeoutMs) { router.acknowledgements.receive() }
         } catch (timeout: TimeoutCancellationException) {
@@ -137,10 +137,6 @@ class AndroidBleTransport(
             throw timeout
         }
         check(ack == HaloAck.SUCCESS) { "Halo rejected data packet" }
-    }
-
-    companion object {
-        const val DATA_MARKER: Byte = 0x01
     }
 }
 

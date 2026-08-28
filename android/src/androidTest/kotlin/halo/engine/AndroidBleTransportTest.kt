@@ -22,7 +22,7 @@ class AndroidBleTransportTest {
 
         transport.sendMessage(0x60, byteArrayOf(1, 2, 3))
         assertEquals(1, fake.writes.size)
-        assertEquals(0x01, fake.writes.single().first().toInt())
+        assertEquals(HaloProtocol.LUA_CTRL_DATA_MARKER, fake.writes.single().first().toInt())
         assertTrue(fake.writes.single().size > 4)
     }
 
@@ -37,12 +37,12 @@ class AndroidBleTransportTest {
         assertEquals(0x60, fake.writes[0][1].toInt())
         assertEquals(0x00, fake.writes[0][2].toInt())
         assertEquals(250, fake.writes[0][3].toInt())
-        assertTrue(fake.writes.all { it.first().toInt() == 1 })
+        assertTrue(fake.writes.all { it.first().toInt() == HaloProtocol.LUA_CTRL_DATA_MARKER })
     }
 
     @Test
     fun routesInterleavedMessageWithoutLosingAck() = runBlocking {
-        val fake = FakeGattChannel(interleaved = byteArrayOf(0x01, 0x0b, 0x01))
+        val fake = FakeGattChannel(interleaved = byteArrayOf(HaloProtocol.LUA_CTRL_DATA_MARKER.toByte(), 0x0b, 0x01))
         val transport = AndroidBleTransport(fake, ackTimeoutMs = 500)
         transport.connect()
         val notification = async { transport.notifications.first() }
@@ -77,7 +77,7 @@ class AndroidBleTransportTest {
         override suspend fun write(bytes: ByteArray) {
             writes += bytes
             interleaved?.let { notifications.send(it) }
-            notifications.send(byteArrayOf(1, 1, 0, 0))
+            notifications.send(byteArrayOf(HaloProtocol.LUA_CTRL_DATA_MARKER.toByte(), 1, 0, 0))
         }
 
         override suspend fun writeAudio(bytes: ByteArray) {

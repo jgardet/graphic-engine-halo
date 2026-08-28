@@ -25,7 +25,7 @@ class HaloNotificationRouter {
 
     fun route(bytes: ByteArray) {
         if (bytes.isEmpty()) return
-        val data = if (bytes[0] == 0x01.toByte()) bytes.copyOfRange(1, bytes.size) else null
+        val data = if (bytes[0] == HaloProtocol.LUA_CTRL_DATA_MARKER.toByte()) bytes.copyOfRange(1, bytes.size) else null
         when {
             data?.contentEquals(byteArrayOf(0x01, 0x00, 0x00)) == true ||
                 data?.contentEquals(byteArrayOf(0x00, 0x00)) == true ||
