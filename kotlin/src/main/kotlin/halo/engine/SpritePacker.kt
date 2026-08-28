@@ -79,3 +79,20 @@ class StubSpritePacker : SpritePacker {
         throw NotImplementedError("Sprite packing on this platform requires a concrete SpritePacker implementation or pre-packed data.")
     }
 }
+
+/** Pack indexed pixels into tightly packed bytes (MSB-first) for 1/2/4 bpp. */
+fun packIndexedPixels(indices: ByteArray, bpp: Int): ByteArray {
+    require(bpp == 1 || bpp == 2 || bpp == 4) { "bpp must be 1, 2, or 4" }
+    val out = java.io.ByteArrayOutputStream()
+    val perByte = 8 / bpp
+    for (start in indices.indices step perByte) {
+        var value = 0
+        for (j in 0 until perByte) {
+            if (start + j < indices.size) {
+                value = value or ((indices[start + j].toInt() and ((1 shl bpp) - 1)) shl ((perByte - j - 1) * bpp))
+            }
+        }
+        out.write(value)
+    }
+    return out.toByteArray()
+}
