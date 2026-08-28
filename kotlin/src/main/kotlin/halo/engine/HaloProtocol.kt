@@ -3,8 +3,11 @@ package halo.engine
 object HaloProtocol {
     const val AUDIO_CHUNK = 0x05
     const val AUDIO_FINAL = 0x06
+    const val PHOTO_JPEG = 0x07
+    const val PHOTO_FINAL = 0x08
     const val TAP = 0x09
     const val BUTTON = 0x0B
+    const val CAPTURE_PHOTO = 0x20
     const val MICROPHONE_START = 0x30
     const val MICROPHONE_STOP = 0x31
     const val SPEAKER_START = 0x40

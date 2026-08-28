@@ -1,15 +1,28 @@
--- Halo Graphic Engine device-side runtime (v1)
--- HRP is transported through the official data.lua message framing.
+-- Halo device-side runtime (v2)
+-- Supports HRP display, microphone, speaker, camera, battery, and input events.
 
+local CLEAR_DISPLAY = 0x10
+local PLAIN_TEXT = 0x11
+local CAPTURE_PHOTO = 0x20
+local MICROPHONE_START = 0x30
+local MICROPHONE_STOP = 0x31
+local SPEAKER_START = 0x40
+local SPEAKER_STOP = 0x41
+local AUDIO_CHUNK = 0x05
+local AUDIO_FINAL = 0x06
+local PHOTO_JPEG = 0x07
+local PHOTO_FINAL = 0x08
 local HRP_CODE = 0x60
-local CLICK_CODE = 0x0B
 local TAP_CODE = 0x09
+local BUTTON_CODE = 0x0B
+local BATTERY_CODE = 0x72
 local STATUS_CODE = 0x70
 local ERROR_CODE = 0x71
-local MAX_HRP_BYTES = 32768
+local MAX_DATA_BYTES = 32768
 
--- Minimal local equivalent of the official data.lua framing. Keeping this
--- small runtime self-contained avoids requiring a vendored SDK at upload time.
+local QUALITIES = { 'VERY_LOW', 'LOW', 'MEDIUM', 'HIGH', 'VERY_HIGH' }
+
+-- Minimal local equivalent of the official data.lua framing.
 local pending = {}
 local completed = {}
 local completed_count = 0
@@ -33,7 +46,7 @@ local function receive_data(packet)
             return
         end
         item.size = string.byte(packet, 2) << 8 | string.byte(packet, 3)
-        if item.size > MAX_HRP_BYTES then
+        if item.size > MAX_DATA_BYTES then
             pending[flag] = nil
             send_event(ERROR_CODE, 'message exceeds runtime limit')
             return
@@ -65,6 +78,7 @@ local function process_raw_items()
 end
 
 frame.bluetooth.receive_callback(receive_data)
+
 local sprites = {}
 local font_id = 0
 local font_size = 8
@@ -80,10 +94,11 @@ end
 
 local function require_len(payload, position, needed)
     if position + needed - 1 > #payload then
-        error('truncated HRP command')
+        error('truncated command')
     end
 end
 
+-- HRP executor (kept from v1, 0-indexed coordinates converted to 1-indexed Lua API).
 local function parse_sprite(payload)
     require_len(payload, 1, 9)
     local id = u16(payload, 1)
@@ -93,12 +108,8 @@ local function parse_sprite(payload)
     local compressed = string.byte(raw, 5) > 0
     local bpp = string.byte(raw, 6)
     local num_colors = string.byte(raw, 7)
-    if compressed then
-        error('compressed HRP sprites are not enabled')
-    end
-    if bpp ~= 1 and bpp ~= 2 and bpp ~= 4 then
-        error('invalid HRP sprite bpp')
-    end
+    if compressed then error('compressed HRP sprites are not enabled') end
+    if bpp ~= 1 and bpp ~= 2 and bpp ~= 4 then error('invalid HRP sprite bpp') end
     local palette_start = 8
     local palette_len = num_colors * 3
     require_len(raw, palette_start, palette_len)
@@ -113,10 +124,8 @@ local function parse_sprite(payload)
     }
 end
 
-local function execute(payload)
-    if #payload > MAX_HRP_BYTES then
-        error('HRP frame exceeds runtime limit')
-    end
+local function execute_hrp(payload)
+    if #payload > MAX_DATA_BYTES then error('HRP frame exceeds runtime limit') end
     if string.sub(payload, 1, 4) ~= 'HRP1' or string.byte(payload, 5) ~= 0 then
         error('invalid HRP header')
     end
@@ -178,17 +187,17 @@ local function execute(payload)
             require_len(command, 1, 7)
             local sprite = sprites[u16(command, 1)]
             if sprite == nil then error('sprite resource not found') end
-            frame.display.bitmap(u16(command, 3) + 1, u16(command, 5) + 1, sprite.width, 2 ^ sprite.bpp, string.byte(command, 7), sprite.pixel_data, { palette_data = sprite.palette_data })
+            frame.display.bitmap(u16(command, 3) + 1, u16(command, 5) + 1, sprite.width, sprite.height, 2 ^ sprite.bpp, string.byte(command, 7), sprite.pixel_data, { palette_data = sprite.palette_data })
         elseif opcode == 0x0C then
             require_len(command, 1, 2)
             sprites[u16(command, 1)] = nil
             collectgarbage('collect')
         elseif opcode == 0x0D then
-            -- Dirty regions are currently a host optimization hint. Halo has no hardware clip API.
+            -- dirty region hint, no-op
         elseif opcode == 0x0E then
-            -- Halo draws immediately; no show() call is needed.
+            -- show() is no-op on Halo
         elseif opcode == 0x0F then
-            -- Feature negotiation is handled by the host profile in v1.
+            -- feature negotiation, no-op in v2
         else
             error('unknown HRP opcode ' .. tostring(opcode))
         end
@@ -199,24 +208,219 @@ local function execute(payload)
     collectgarbage('collect')
 end
 
-frame.button.single(function() send_event(CLICK_CODE, string.char(1)) end)
-frame.button.double(function() send_event(CLICK_CODE, string.char(2)) end)
-frame.button.long(function() send_event(CLICK_CODE, string.char(3)) end)
+-- State for streaming features.
+local micStreaming = false
+local micConfig = {}
+local speakerStreaming = false
+local photoPending = nil
+
+-- Display helpers.
+local COLORS = {
+    0x000000, 0xFFFFFF, 0x808080, 0xFF0000, 0xFFC0CB, 0x654321, 0x964B00,
+    0xFFA500, 0xFFFF00, 0x006400, 0x00FF00, 0x90EE90, 0x191970, 0x0000CD,
+    0x87CEEB, 0xF0F8FF
+}
+
+local function draw_plain_text(payload)
+    if #payload < 6 then return end
+    local x = u16(payload, 1)
+    local y = u16(payload, 3)
+    local palette = string.byte(payload, 5) % 16 + 1
+    local c = COLORS[palette]
+    local spacing = string.byte(payload, 6)
+    local text = string.sub(payload, 7)
+    local i = 0
+    for line in text:gmatch('([^\r\n]*)\r?\n?') do
+        if line ~= '' then
+            frame.display.text(line, x, y + i * spacing, c)
+            i = i + 1
+        end
+    end
+end
+
+-- Audio helpers.
+local function mic_chunk_size()
+    local max = frame.bluetooth.max_length() - 1
+    if max % 2 == 1 then max = max - 1 end
+    return max
+end
+
+local function send_mic_chunks()
+    if not micStreaming then return end
+    local max = mic_chunk_size()
+    for _ = 1, 10 do
+        local data = frame.microphone.read(max)
+        if data == nil then
+            send_event(AUDIO_FINAL, '')
+            micStreaming = false
+            break
+        end
+        if data ~= '' then
+            local ok, err = pcall(frame.bluetooth.send, string.char(AUDIO_CHUNK) .. data)
+            if not ok then
+                print('mic send error: ' .. tostring(err))
+                send_event(ERROR_CODE, 'mic send failed')
+                micStreaming = false
+                break
+            end
+        end
+    end
+end
+
+-- Camera helpers.
+local function photo_chunk_size()
+    return frame.bluetooth.max_length() - 1
+end
+
+local function send_photo()
+    if not photoPending then return end
+    if not frame.camera.image_ready() then return end
+    local max = photo_chunk_size()
+    while true do
+        local chunk = frame.camera.read(max)
+        if chunk == nil then
+            send_event(PHOTO_FINAL, '')
+            photoPending = nil
+            collectgarbage('collect')
+            break
+        end
+        if chunk ~= '' then
+            local ok, err = pcall(frame.bluetooth.send, string.char(PHOTO_JPEG) .. chunk)
+            if not ok then
+                print('photo send error: ' .. tostring(err))
+                send_event(ERROR_CODE, 'photo send failed')
+                photoPending = nil
+                break
+            end
+        end
+    end
+end
+
+-- Battery helper.
+local function send_battery()
+    local level = frame.battery_level()
+    local voltage = frame.battery_voltage()
+    local charging = frame.battery_charging() and 1 or 0
+    local payload = string.char(level) .. string.char(voltage >> 8) .. string.char(voltage & 0xFF) .. string.char(charging)
+    send_event(BATTERY_CODE, payload)
+end
+
+-- Message dispatch.
+local function handle_message(code, payload)
+    if code == HRP_CODE then
+        local ok, err = pcall(execute_hrp, payload)
+        if not ok then
+            send_event(ERROR_CODE, tostring(err))
+            print(err)
+        end
+    elseif code == CLEAR_DISPLAY then
+        frame.display.clear()
+    elseif code == PLAIN_TEXT then
+        pcall(draw_plain_text, payload)
+    elseif code == MICROPHONE_START then
+        micConfig = {}
+        if #payload >= 3 then
+            local gain = string.byte(payload, 1)
+            if gain > 20 then gain = 20 end
+            micConfig.gain = gain
+            micConfig.aec = string.byte(payload, 2) ~= 0
+            micConfig.voice = string.byte(payload, 3) ~= 0
+        else
+            micConfig.gain = 10
+            micConfig.aec = true
+            micConfig.voice = false
+        end
+        local ok, err = pcall(frame.microphone.start, {
+            encoder = 'pcm',
+            sample_rate = 16000,
+            bit_depth = 16,
+            channels = 1,
+            gain = micConfig.gain,
+            aec = micConfig.aec,
+            voice = micConfig.voice,
+            duration = 1000,
+        })
+        if ok then
+            micStreaming = true
+        else
+            print('mic start error: ' .. tostring(err))
+            send_event(ERROR_CODE, 'mic start failed')
+        end
+    elseif code == MICROPHONE_STOP then
+        micStreaming = false
+        pcall(frame.microphone.stop)
+    elseif code == SPEAKER_START then
+        local config = { encoder = 'pcm', sample_rate = 16000, bit_depth = 16, channels = 1, volume = 80, duration = 1000 }
+        if #payload >= 1 then config.encoder = (string.byte(payload, 1) == 1) and 'lc3' or 'pcm' end
+        if #payload >= 3 then config.sample_rate = u16(payload, 2) end
+        if #payload >= 4 then config.bit_depth = string.byte(payload, 4) end
+        if #payload >= 5 then config.channels = string.byte(payload, 5) end
+        if #payload >= 6 then config.volume = string.byte(payload, 6) end
+        local ok, err = pcall(frame.speaker.start, config)
+        if not ok then
+            print('speaker start error: ' .. tostring(err))
+            send_event(ERROR_CODE, 'speaker start failed')
+        else
+            speakerStreaming = true
+        end
+    elseif code == SPEAKER_STOP then
+        speakerStreaming = false
+        pcall(frame.speaker.stop)
+    elseif code == CAPTURE_PHOTO then
+        if photoPending then return end
+        local quality_index = 4
+        local half_res = 256
+        local pan_shifted = 140
+        local raw = false
+        if #payload >= 6 then
+            quality_index = string.byte(payload, 1)
+            half_res = u16(payload, 2)
+            pan_shifted = u16(payload, 4)
+            raw = string.byte(payload, 6) ~= 0
+        end
+        if quality_index < 1 then quality_index = 1 elseif quality_index > 5 then quality_index = 5 end
+        local quality = QUALITIES[quality_index]
+        local resolution = half_res * 2
+        local pan = pan_shifted - 140
+        local cfg = { resolution = resolution, quality = quality, pan = pan }
+        if raw then cfg.raw = true end
+        local ok, err = pcall(frame.camera.capture, cfg)
+        if ok then
+            photoPending = { resolution = resolution, quality = quality, raw = raw }
+        else
+            print('camera capture error: ' .. tostring(err))
+            send_event(ERROR_CODE, 'camera capture failed')
+        end
+    elseif code == BATTERY_CODE then
+        pcall(send_battery)
+    else
+        -- ignore unknown
+    end
+end
+
+-- Input callbacks.
+frame.button.single(function() send_event(BUTTON_CODE, string.char(1)) end)
+frame.button.double(function() send_event(BUTTON_CODE, string.char(2)) end)
+frame.button.long(function() send_event(BUTTON_CODE, string.char(3)) end)
 frame.imu.tap_callback(function(kind)
     local codes = { single = 1, double = 2, triple = 3 }
     send_event(TAP_CODE, string.char(codes[kind] or 1))
 end)
 frame.display.power_save(false)
-send_event(STATUS_CODE, 'HRP1;primitives,sprites,click,tap')
-print('Halo Engine HRP ready')
+send_event(STATUS_CODE, 'HRP1;primitives,sprites,click,tap,mic,speaker,photo,battery')
+print('Halo Engine v2 ready')
 
 while true do
     local ok, err = pcall(function()
         local items = process_raw_items()
         for i = 1, #items do
-            if items[i][1] == HRP_CODE then
-                execute(items[i][2])
-            end
+            handle_message(items[i][1], items[i][2])
+        end
+        if micStreaming then
+            send_mic_chunks()
+        end
+        if photoPending then
+            send_photo()
         end
         frame.sleep(0.001)
     end)

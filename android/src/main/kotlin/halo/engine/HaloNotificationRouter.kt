@@ -47,8 +47,11 @@ class HaloNotificationRouter {
         val APP_MESSAGE_CODES = setOf(
             HaloProtocol.AUDIO_CHUNK,
             HaloProtocol.AUDIO_FINAL,
+            HaloProtocol.PHOTO_JPEG,
+            HaloProtocol.PHOTO_FINAL,
             HaloProtocol.TAP,
             HaloProtocol.BUTTON,
+            HaloProtocol.CAPTURE_PHOTO,
             HaloProtocol.MICROPHONE_START,
             HaloProtocol.MICROPHONE_STOP,
             HaloProtocol.SPEAKER_START,

@@ -35,6 +35,6 @@ def test_runtime_executes_hrp(tmp_path):
         sent = emu.get_bluetooth_sent()
         assert b"\x0b\x01" in sent
         assert b"\x09\x02" in sent
-        assert any("HRP ready" in line for line in lines)
+        assert any("ready" in line for line in lines)
     finally:
         emu.stop()

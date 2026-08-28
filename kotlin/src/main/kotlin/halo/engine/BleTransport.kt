@@ -14,6 +14,8 @@ interface HaloBleTransport {
     suspend fun sendLua(lua: String)
     suspend fun sendMessage(code: Int, payload: ByteArray)
     suspend fun sendData(bytes: ByteArray)
+    suspend fun sendAudioFrame(frame: ByteArray)
+    val supportsAudio: Boolean
     val maxLuaPayload: Int
     val maxDataPayload: Int
 }

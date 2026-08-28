@@ -6,9 +6,11 @@ package halo.engine
 class MockBleTransport(
     override val maxLuaPayload: Int = 182,
     override val maxDataPayload: Int = 512,
+    override val supportsAudio: Boolean = false,
 ) : HaloBleTransport {
     val luaChunks = mutableListOf<String>()
     val dataChunks = mutableListOf<ByteArray>()
+    val audioChunks = mutableListOf<ByteArray>()
     var connected = false
 
     override suspend fun connect(name: String?) {
@@ -31,5 +33,9 @@ class MockBleTransport(
 
     override suspend fun sendData(bytes: ByteArray) {
         dataChunks.add(bytes)
+    }
+
+    override suspend fun sendAudioFrame(frame: ByteArray) {
+        audioChunks.add(frame)
     }
 }

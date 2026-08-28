@@ -62,7 +62,9 @@ class AndroidBleTransportTest {
         override var mtu: Int = 23
         override val notifications = Channel<ByteArray>(Channel.UNLIMITED)
         override val connectionEvents = Channel<Boolean>(Channel.CONFLATED)
+        override val supportsAudio: Boolean = false
         val writes = mutableListOf<ByteArray>()
+        val audioWrites = mutableListOf<ByteArray>()
 
         override suspend fun discoverAndEnableNotifications() = Unit
 
@@ -70,10 +72,16 @@ class AndroidBleTransportTest {
             mtu = minOf(desired, maxMtu)
         }
 
+        override suspend fun requestConnectionPriority(priority: Int): Boolean = true
+
         override suspend fun write(bytes: ByteArray) {
             writes += bytes
             interleaved?.let { notifications.send(it) }
             notifications.send(byteArrayOf(1, 1, 0, 0))
+        }
+
+        override suspend fun writeAudio(bytes: ByteArray) {
+            audioWrites += bytes
         }
 
         override suspend fun close() = Unit

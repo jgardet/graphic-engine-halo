@@ -58,10 +58,13 @@ class AndroidBleTransport(
         get() = channel.mtu.coerceAtMost(512) - 3
     override val maxDataPayload: Int
         get() = channel.mtu.coerceAtMost(512) - 4
+    override val supportsAudio: Boolean
+        get() = channel.supportsAudio
 
     override suspend fun connect(name: String?) {
         channel.discoverAndEnableNotifications()
         channel.requestMtu(512)
+        channel.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
     }
 
     override suspend fun disconnect() {
@@ -113,6 +116,11 @@ class AndroidBleTransport(
         writeMutex.withLock { sendDataPacket(bytes) }
     }
 
+    override suspend fun sendAudioFrame(frame: ByteArray) {
+        require(frame.size <= maxDataPayload) { "Audio frame ${frame.size} exceeds max payload $maxDataPayload" }
+        writeMutex.withLock { channel.writeAudio(frame) }
+    }
+
     private suspend fun sendDataPacket(packet: ByteArray) {
         require(packet.size <= maxDataPayload)
         while (router.acknowledgements.tryReceive().isSuccess) Unit
@@ -136,9 +144,12 @@ interface GattChannel {
     val mtu: Int
     val notifications: Channel<ByteArray>
     val connectionEvents: Channel<Boolean>
+    val supportsAudio: Boolean
     suspend fun discoverAndEnableNotifications()
     suspend fun requestMtu(desired: Int)
+    suspend fun requestConnectionPriority(priority: Int): Boolean
     suspend fun write(bytes: ByteArray)
+    suspend fun writeAudio(bytes: ByteArray)
     suspend fun close()
 }
 
@@ -208,6 +219,7 @@ class BluetoothGattChannel(
     internal var mtuResults = CompletableDeferred<Pair<Int, Int>>()
     private val tx: BluetoothGattCharacteristic by lazy { requireCharacteristic(TX_UUID) }
     private val rx: BluetoothGattCharacteristic by lazy { requireCharacteristic(RX_UUID) }
+    private val audioTx: BluetoothGattCharacteristic? by lazy { optionalCharacteristic(AUDIO_TX_UUID) }
 
     override suspend fun discoverAndEnableNotifications() {
         serviceResults = CompletableDeferred()
@@ -231,12 +243,23 @@ class BluetoothGattChannel(
         }
     }
 
+    override val supportsAudio: Boolean
+        get() = audioTx != null
+
     override suspend fun requestMtu(desired: Int) {
         mtuResults = CompletableDeferred()
         check(gatt.requestMtu(desired)) { "BluetoothGatt rejected MTU request" }
         val (negotiated, status) = withTimeout(5_000) { mtuResults.await() }
         check(status == BluetoothGatt.GATT_SUCCESS) { "Halo MTU negotiation failed: $status" }
         mtu = negotiated
+    }
+
+    override suspend fun requestConnectionPriority(priority: Int): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+            gatt.requestConnectionPriority(priority)
+        } else {
+            false
+        }
     }
 
     override suspend fun write(bytes: ByteArray) {
@@ -253,6 +276,23 @@ class BluetoothGattChannel(
         check(status == BluetoothGatt.GATT_SUCCESS) { "Halo write failed: $status" }
     }
 
+    override suspend fun writeAudio(bytes: ByteArray) {
+        val audio = audioTx ?: throw IllegalStateException("AUDIO_TX is not available on this device")
+        require(bytes.size <= mtu - 3) { "Audio frame ${bytes.size} exceeds MTU payload ${mtu - 3}" }
+        val accepted = if (Build.VERSION.SDK_INT >= 33) {
+            gatt.writeCharacteristic(audio, bytes, BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE) == BluetoothStatusCodes.SUCCESS
+        } else {
+            @Suppress("DEPRECATION")
+            audio.value = bytes
+            @Suppress("DEPRECATION")
+            audio.writeType = BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE
+            gatt.writeCharacteristic(audio)
+        }
+        check(accepted) { "BluetoothGatt rejected AUDIO_TX write" }
+        val status = withTimeout(5_000) { writeResults.receive() }
+        check(status == BluetoothGatt.GATT_SUCCESS) { "Halo AUDIO_TX write failed: $status" }
+    }
+
     override suspend fun close() {
         gatt.disconnect()
         gatt.close()
@@ -263,10 +303,16 @@ class BluetoothGattChannel(
         return requireNotNull(service.getCharacteristic(uuid)) { "Halo characteristic not discovered: $uuid" }
     }
 
+    private fun optionalCharacteristic(uuid: UUID): BluetoothGattCharacteristic? {
+        val service: BluetoothGattService? = gatt.getService(SERVICE_UUID)
+        return service?.getCharacteristic(uuid)
+    }
+
     companion object {
         val SERVICE_UUID: UUID = UUID.fromString("7a230001-5475-a6a4-654c-8431f6ad49c4")
         val TX_UUID: UUID = UUID.fromString("7a230002-5475-a6a4-654c-8431f6ad49c4")
         val RX_UUID: UUID = UUID.fromString("7a230003-5475-a6a4-654c-8431f6ad49c4")
+        val AUDIO_TX_UUID: UUID = UUID.fromString("7a230005-5475-a6a4-654c-8431f6ad49c4")
         val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 }
