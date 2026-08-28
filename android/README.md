@@ -17,9 +17,9 @@ Scanning and the initial `connectGatt()` call belong to the app's foreground ser
 
 ```kotlin
 val callbacks = BluetoothGattChannel.Callbacks()
-val gatt = device.connectGatt(context, false, callbacks)
-// In onConnectionStateChange, callbacks.channel becomes available.
-val transport = AndroidBleTransport(callbacks.channel!!)
+device.connectGatt(context, false, callbacks)
+val channel = callbacks.awaitChannel()
+val transport = AndroidBleTransport(channel)
 transport.connect()
 ```
 

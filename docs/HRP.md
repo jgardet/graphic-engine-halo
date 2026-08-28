@@ -30,7 +30,7 @@ All integers are unsigned big-endian unless stated otherwise. Coordinates use th
 | `0x07` | `count:u8 points:(x:u16,y:u16)* color:u24` | Polygon |
 | `0x08` | `font:u8 size:u8 scale:u8` | Set font |
 | `0x09` | `x:u16 y:u16 color:u24 len:u16 utf8[len]` | Text |
-| `0x0A` | `id:u16 w:u16 h:u16 bpp:u8 colors:u8 palette_len:u16 palette + pixel_len:u32 pixels` | Define/replace sprite resource |
+| `0x0A` | `id:u16 w:u16 h:u16 compressed:u8 bpp:u8 colors:u8 palette[colors*3] pixels[remaining]` | Define/replace sprite resource |
 | `0x0B` | `id:u16 x:u16 y:u16 offset:u8` | Draw retained sprite |
 | `0x0C` | `id:u16` | Release sprite resource |
 | `0x0D` | `x:u16 y:u16 w:u16 h:u16` | Begin dirty region (optimization hint) |
