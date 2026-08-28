@@ -31,6 +31,12 @@ def test_lua_source_is_hardware_bounded():
         validate_lua_size("x" * 4097)
 
 
+def test_hrp_row_offsets_are_applied_once():
+    scene = {"scene": {"children": [{"type": "row", "x": 10, "y": 20, "children": [{"type": "point", "x": 1, "y": 2}]}]}}
+    commands = decode_frame(compile_scene_hrp(scene))
+    assert (0x03, b"\x00\x0b\x00\x16\xff\xff\xff") in commands
+
+
 def test_scene_compiles_to_binary_hrp():
     scene = {"scene": {"bg": "#000000", "children": [{"type": "rect", "x": 1, "y": 2, "w": 3, "h": 4, "filled": True}]}}
     payload = compile_scene_hrp(scene)

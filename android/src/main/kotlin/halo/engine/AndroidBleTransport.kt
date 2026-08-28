@@ -1,13 +1,29 @@
 package halo.engine
 
+import android.annotation.SuppressLint
 import android.bluetooth.BluetoothGatt
 import android.bluetooth.BluetoothGattCallback
 import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
+import android.bluetooth.BluetoothStatusCodes
 import android.os.Build
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
@@ -23,8 +39,20 @@ import java.util.UUID
 class AndroidBleTransport(
     private val channel: GattChannel,
     private val ackTimeoutMs: Long = 5_000,
+    private val router: HaloNotificationRouter = HaloNotificationRouter(),
 ) : HaloBleTransport {
     private val writeMutex = Mutex()
+    private val notificationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    val notifications: SharedFlow<HaloNotification> = router.notifications
+
+    init {
+        notificationScope.launch {
+            for (bytes in channel.notifications) router.route(bytes)
+        }
+        notificationScope.launch {
+            for (connected in channel.connectionEvents) if (!connected) router.disconnected()
+        }
+    }
 
     override val maxLuaPayload: Int
         get() = channel.mtu.coerceAtMost(512) - 3
@@ -36,12 +64,31 @@ class AndroidBleTransport(
         channel.requestMtu(512)
     }
 
-    override suspend fun disconnect() = channel.close()
+    override suspend fun disconnect() {
+        channel.close()
+        notificationScope.cancel()
+    }
 
     override suspend fun sendLua(lua: String) {
         val bytes = lua.toByteArray(Charsets.UTF_8)
         require(bytes.size <= maxLuaPayload) { "Lua command exceeds negotiated BLE payload" }
         writeMutex.withLock { channel.write(bytes) }
+    }
+
+    suspend fun sendControl(signal: Byte) {
+        writeMutex.withLock { channel.write(byteArrayOf(signal)) }
+    }
+
+    suspend fun sendLuaAwaitResponse(lua: String, expected: String? = null, timeoutMs: Long = 5_000): String = coroutineScope {
+        val response = async(start = CoroutineStart.UNDISPATCHED) {
+            withTimeout(timeoutMs) {
+                notifications.filterIsInstance<HaloNotification.Text>().first {
+                    expected == null || it.value.trim() == expected
+                }.value.trim()
+            }
+        }
+        sendLua(lua)
+        response.await()
     }
 
     override suspend fun sendMessage(code: Int, payload: ByteArray) {
@@ -53,6 +100,7 @@ class AndroidBleTransport(
             sendDataPacket(byteArrayOf(code.toByte(), (payload.size ushr 8).toByte(), payload.size.toByte()) + payload.copyOfRange(0, firstCount))
             offset = firstCount
             while (offset < payload.size) {
+                currentCoroutineContext().ensureActive()
                 val count = minOf(payload.size - offset, maxDataPayload - 1)
                 sendDataPacket(byteArrayOf(code.toByte()) + payload.copyOfRange(offset, offset + count))
                 offset += count
@@ -67,16 +115,16 @@ class AndroidBleTransport(
 
     private suspend fun sendDataPacket(packet: ByteArray) {
         require(packet.size <= maxDataPayload)
+        while (router.acknowledgements.tryReceive().isSuccess) Unit
         channel.write(byteArrayOf(DATA_MARKER) + packet)
-        withTimeout(ackTimeoutMs) {
-            while (true) {
-                if (channel.notifications.receive().isAck()) return@withTimeout
-            }
+        val ack = try {
+            withTimeout(ackTimeoutMs) { router.acknowledgements.receive() }
+        } catch (timeout: TimeoutCancellationException) {
+            channel.close()
+            throw timeout
         }
+        check(ack == HaloAck.SUCCESS) { "Halo rejected data packet" }
     }
-
-    private fun ByteArray.isAck(): Boolean = contentEquals(byteArrayOf(DATA_MARKER, 0x00, 0x00)) ||
-        contentEquals(byteArrayOf(0x00, 0x00))
 
     companion object {
         const val DATA_MARKER: Byte = 0x01
@@ -87,6 +135,7 @@ class AndroidBleTransport(
 interface GattChannel {
     val mtu: Int
     val notifications: Channel<ByteArray>
+    val connectionEvents: Channel<Boolean>
     suspend fun discoverAndEnableNotifications()
     suspend fun requestMtu(desired: Int)
     suspend fun write(bytes: ByteArray)
@@ -94,12 +143,15 @@ interface GattChannel {
 }
 
 /** BluetoothGatt implementation of [GattChannel]. */
+@SuppressLint("MissingPermission")
 class BluetoothGattChannel(
     private val gatt: BluetoothGatt,
     private val callbacks: Callbacks,
 ) : GattChannel {
     private val writeResults = Channel<Int>(Channel.UNLIMITED)
+    private val descriptorResults = Channel<Int>(Channel.UNLIMITED)
     override val notifications = Channel<ByteArray>(Channel.UNLIMITED)
+    override val connectionEvents = Channel<Boolean>(Channel.CONFLATED)
     override var mtu: Int = 23
         private set
 
@@ -109,11 +161,21 @@ class BluetoothGattChannel(
 
     class Callbacks : BluetoothGattCallback() {
         var channel: BluetoothGattChannel? = null
+        private var connectionResult = CompletableDeferred<BluetoothGattChannel>()
+
+        suspend fun awaitChannel(timeoutMs: Long = 10_000): BluetoothGattChannel =
+            withTimeout(timeoutMs) { connectionResult.await() }
 
         override fun onConnectionStateChange(gatt: BluetoothGatt, status: Int, newState: Int) {
             if (status == BluetoothGatt.GATT_SUCCESS && newState == android.bluetooth.BluetoothProfile.STATE_CONNECTED && channel == null) {
-                channel = BluetoothGattChannel(gatt, this)
+                val connected = BluetoothGattChannel(gatt, this)
+                connectionResult.complete(connected)
+            } else if (status != BluetoothGatt.GATT_SUCCESS && !connectionResult.isCompleted) {
+                connectionResult.completeExceptionally(IllegalStateException("Halo connection failed: $status"))
+            } else if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED && !connectionResult.isCompleted) {
+                connectionResult.completeExceptionally(IllegalStateException("Halo disconnected before setup"))
             }
+            if (newState == android.bluetooth.BluetoothProfile.STATE_DISCONNECTED) channel?.connectionEvents?.trySend(false)
         }
 
         override fun onServicesDiscovered(gatt: BluetoothGatt, status: Int) {
@@ -126,6 +188,10 @@ class BluetoothGattChannel(
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
             channel?.writeResults?.trySend(status)
+        }
+
+        override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
+            channel?.descriptorResults?.trySend(status)
         }
 
         @Deprecated("Use the API 33 callback on Android 13+")
@@ -149,30 +215,40 @@ class BluetoothGattChannel(
         check(withTimeout(5_000) { serviceResults.await() } == BluetoothGatt.GATT_SUCCESS) {
             "Halo service discovery failed"
         }
-        val descriptor = rx.getDescriptor(CCCD_UUID)
-        if (descriptor != null) {
-            check(gatt.setCharacteristicNotification(rx, true)) { "Unable to enable Halo notifications" }
+        val descriptor = requireNotNull(rx.getDescriptor(CCCD_UUID)) { "Halo notification descriptor is missing" }
+        check(gatt.setCharacteristicNotification(rx, true)) { "Unable to enable Halo notifications" }
+        val accepted = if (Build.VERSION.SDK_INT >= 33) {
+            gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == BluetoothStatusCodes.SUCCESS
+        } else {
             @Suppress("DEPRECATION")
             descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
             @Suppress("DEPRECATION")
-            check(gatt.writeDescriptor(descriptor)) { "BluetoothGatt rejected notification descriptor write" }
-            check(withTimeout(5_000) { writeResults.receive() } == BluetoothGatt.GATT_SUCCESS) {
-                "Halo notification descriptor write failed"
-            }
+            gatt.writeDescriptor(descriptor)
+        }
+        check(accepted) { "BluetoothGatt rejected notification descriptor write" }
+        check(withTimeout(5_000) { descriptorResults.receive() } == BluetoothGatt.GATT_SUCCESS) {
+            "Halo notification descriptor write failed"
         }
     }
 
     override suspend fun requestMtu(desired: Int) {
         mtuResults = CompletableDeferred()
-        if (Build.VERSION.SDK_INT >= 21) check(gatt.requestMtu(desired)) { "BluetoothGatt rejected MTU request" }
+        check(gatt.requestMtu(desired)) { "BluetoothGatt rejected MTU request" }
         val (negotiated, status) = withTimeout(5_000) { mtuResults.await() }
         check(status == BluetoothGatt.GATT_SUCCESS) { "Halo MTU negotiation failed: $status" }
         mtu = negotiated
     }
 
     override suspend fun write(bytes: ByteArray) {
-        tx.value = bytes
-        check(gatt.writeCharacteristic(tx)) { "BluetoothGatt rejected write" }
+        val accepted = if (Build.VERSION.SDK_INT >= 33) {
+            gatt.writeCharacteristic(tx, bytes, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) == BluetoothStatusCodes.SUCCESS
+        } else {
+            @Suppress("DEPRECATION")
+            tx.value = bytes
+            @Suppress("DEPRECATION")
+            gatt.writeCharacteristic(tx)
+        }
+        check(accepted) { "BluetoothGatt rejected write" }
         val status = withTimeout(5_000) { writeResults.receive() }
         check(status == BluetoothGatt.GATT_SUCCESS) { "Halo write failed: $status" }
     }

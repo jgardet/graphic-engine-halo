@@ -5,15 +5,20 @@ import kotlinx.serialization.json.JsonElement
 /** High-level host runtime using official message framing for binary rendering. */
 class HaloHost(
     private val transport: HaloBleTransport,
-    private val compiler: HaloCompiler = HaloCompiler(),
     private val limits: HaloLimits = StockHaloLimits,
+    private val compiler: HaloCompiler = HaloCompiler(),
+    private val hrpCompiler: HsdHrpCompiler = HsdHrpCompiler(limits = limits),
 ) {
     suspend fun show(scene: JsonElement) {
         val lua = compiler.compile(scene)
         sendLua(lua)
     }
 
-    suspend fun showHrp(payload: ByteArray, code: Int = 0x60) {
+    suspend fun showScene(scene: JsonElement, code: Int = HaloProtocol.HRP) {
+        showHrp(hrpCompiler.compile(scene), code)
+    }
+
+    suspend fun showHrp(payload: ByteArray, code: Int = HaloProtocol.HRP) {
         validateHrpMessage(payload, limits)
         transport.sendMessage(code, payload)
     }
@@ -28,10 +33,10 @@ class HaloHost(
     }
 
     /** Send an already packed asset through the transport's data channel. */
-    suspend fun sendSprite(sprite: SpritePacker.Sprite) {
+    suspend fun sendSprite(sprite: SpritePacker.Sprite, resourceId: Int = 1) {
         val packed = packSpriteAsset(sprite)
         require(packed.size <= limits.maxAssetBytes) { "Sprite exceeds conservative stock asset budget" }
-        transport.sendMessage(0x20, packed)
+        showHrp(HrpBuilder(limits.maxHrpMessageBytes).spriteDefine(resourceId, packed).endFrame().build())
     }
 
     companion object {

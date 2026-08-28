@@ -27,6 +27,31 @@ class CompilerTest {
     """.trimIndent()
 
     @Test
+    fun rowOffsetsAreAppliedOnce() {
+        val row = json.parseToJsonElement(
+            """{"scene":{"children":[{"type":"row","x":10,"y":20,"children":[{"type":"point","x":1,"y":2,"color":"#FFFFFF"}]}]}}"""
+        )
+        assertContains(HaloCompiler().compile(row), "frame.display.set_pixel(12,23,0xFFFFFF)")
+    }
+
+    @Test
+    fun spriteBytesUseTwoDigitLuaEscapes() {
+        val packer = object : SpritePacker {
+            override fun pack(src: String, width: Int?, height: Int?, bpp: Int) = SpritePacker.Sprite(
+                width = 1,
+                height = 1,
+                bpp = 4,
+                numColors = 1,
+                paletteData = byteArrayOf(0xff.toByte(), 0x80.toByte(), 0x00),
+                pixelData = byteArrayOf(0x0f),
+            )
+        }
+        val sprite = json.parseToJsonElement("""{"scene":{"children":[{"type":"sprite","src":"test"}]}}""")
+        val lua = HaloCompiler(packer).compile(sprite)
+        assertContains(lua, "\\xFF\\x80\\x00")
+    }
+
+    @Test
     fun compileCircleAndText() {
         val compiler = HaloCompiler()
         val lua = compiler.compile(json.parseToJsonElement(scene))

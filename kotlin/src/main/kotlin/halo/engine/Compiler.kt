@@ -23,7 +23,7 @@ class HaloCompiler(private val packer: SpritePacker = StubSpritePacker()) {
         append("frame.display.clear(${HaloColor.toHex(bg)})")
 
         // Power save
-        if (root["power_save"]?.jsonPrimitive?.boolean != true) {
+        if (root["power_save"]?.jsonPrimitive?.booleanOrNull != true) {
             append("frame.display.power_save(false)")
         }
 
@@ -165,9 +165,7 @@ class HaloCompiler(private val packer: SpritePacker = StubSpritePacker()) {
         var currentX = startX
         el["children"]?.jsonArray?.forEach { child ->
             val c = child.jsonObject
-            val cx = currentX + int(c, "x", 0)
-            val cy = y + int(c, "y", 0)
-            compileElement(c, cx, cy)
+            compileElement(c, currentX, y)
             currentX += estimateWidth(c) + spacing
         }
     }
@@ -179,9 +177,7 @@ class HaloCompiler(private val packer: SpritePacker = StubSpritePacker()) {
         var currentY = startY
         el["children"]?.jsonArray?.forEach { child ->
             val c = child.jsonObject
-            val cx = x + int(c, "x", 0)
-            val cy = currentY + int(c, "y", 0)
-            compileElement(c, cx, cy)
+            compileElement(c, x, currentY)
             currentY += estimateHeight(c) + spacing
         }
     }
@@ -206,7 +202,7 @@ class HaloCompiler(private val packer: SpritePacker = StubSpritePacker()) {
         return "'$escaped'"
     }
 
-    private fun hexEscape(data: ByteArray): String = data.joinToString("") { "\\x%02X".format(it) }
+    private fun hexEscape(data: ByteArray): String = data.joinToString("") { "\\x%02X".format(it.toInt() and 0xff) }
 
     private fun packIndexedPixels(indices: ByteArray, bpp: Int): ByteArray {
         return when (bpp) {
