@@ -347,7 +347,6 @@ local function handle_message(code, payload)
             send_event(ERROR_CODE, 'mic start failed')
         end
     elseif code == MICROPHONE_STOP then
-        micStreaming = false
         pcall(frame.microphone.stop)
     elseif code == SPEAKER_START then
         local config = { encoder = 'pcm', sample_rate = 16000, bit_depth = 16, channels = 1, volume = 80, duration = 1000 }
