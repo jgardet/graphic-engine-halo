@@ -3,7 +3,9 @@ package halo.engine
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeout
@@ -39,6 +41,7 @@ class HaloRuntimeInstaller(
         val chunkSize = transport.maxLuaPayload - overhead
         require(chunkSize > 0) { "Negotiated MTU is too small for runtime upload" }
         utf8Chunks(escaped, chunkSize).forEach { chunk ->
+            currentCoroutineContext().ensureActive()
             transport.sendLuaAwaitResponse("f:write(\"$chunk\");print(1)", expected = "1")
         }
         transport.sendLuaAwaitResponse("f:close();print(1)", expected = "1")
