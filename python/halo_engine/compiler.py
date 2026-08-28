@@ -9,6 +9,7 @@ from typing import Any
 from .colors import color_to_hex_str
 from .sprite import pack_sprite, pack_bits
 from .hrp import HrpBuilder
+from .hsd_validator import HsdValidator
 from .limits import STOCK_HALO, HaloLimits, validate_lua_size
 
 
@@ -44,6 +45,7 @@ def _hex_bytes(data: bytes) -> str:
 
 def compile_scene(scene: dict[str, Any], limits: HaloLimits = STOCK_HALO) -> str:
     """Compile an HSD scene to a hardware-bounded Lua REPL command."""
+    HsdValidator(limits=limits).validate(scene)
     root = scene.get("scene", {})
     mode = scene.get("mode", "repl")
     if mode != "repl":
@@ -229,9 +231,7 @@ def _compile_row(el: dict[str, Any], lua: LuaBuilder, dx: int, dy: int) -> None:
     spacing = int(el.get("spacing", 0))
     current_x = start_x
     for child in el.get("children", []):
-        child_x = current_x + int(child.get("x", 0))
-        child_y = y + int(child.get("y", 0))
-        _compile_element(child, lua, child_x, child_y)
+        _compile_element(child, lua, current_x, y)
         current_x += _estimated_width(child) + spacing
 
 
@@ -241,9 +241,7 @@ def _compile_column(el: dict[str, Any], lua: LuaBuilder, dx: int, dy: int) -> No
     spacing = int(el.get("spacing", 0))
     current_y = start_y
     for child in el.get("children", []):
-        child_x = x + int(child.get("x", 0))
-        child_y = current_y + int(child.get("y", 0))
-        _compile_element(child, lua, child_x, child_y)
+        _compile_element(child, lua, x, current_y)
         current_y += _estimated_height(child) + spacing
 
 

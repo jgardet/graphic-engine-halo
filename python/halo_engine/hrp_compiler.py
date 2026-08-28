@@ -7,11 +7,13 @@ import zlib
 
 from .compiler import _estimated_height, _estimated_width
 from .hrp import HrpBuilder
+from .hsd_validator import HsdValidator
 from .limits import STOCK_HALO, validate_asset_size
 from .sprite import pack_sprite
 
 
 def compile_scene_hrp(scene: dict[str, Any], max_bytes: int = STOCK_HALO.max_hrp_message_bytes) -> bytes:
+    HsdValidator().validate(scene)
     root = scene.get("scene", {})
     builder = HrpBuilder(max_bytes=max_bytes)
     defined: set[int] = set()
@@ -34,10 +36,10 @@ def _element(el: dict[str, Any], b: HrpBuilder, dx: int, dy: int, defined: set[i
         spacing = int(el.get("spacing", 0))
         for child in el.get("children", []):
             if typ == "row":
-                _element(child, b, current + int(child.get("x", 0)), oy + int(child.get("y", 0)), defined)
+                _element(child, b, current, oy, defined)
                 current += _estimated_width(child) + spacing
             elif typ == "column":
-                _element(child, b, ox + int(child.get("x", 0)), current + int(child.get("y", 0)), defined)
+                _element(child, b, ox, current, defined)
                 current += _estimated_height(child) + spacing
             else:
                 _element(child, b, ox, oy, defined)
@@ -58,6 +60,8 @@ def _element(el: dict[str, Any], b: HrpBuilder, dx: int, dy: int, defined: set[i
     elif typ in ("point", "pixel"):
         b.pixel(int(el.get("x", 0)) + dx, int(el.get("y", 0)) + dy, color)
     elif typ == "sprite":
+        if int(el.get("scale_x", 1)) != 1 or int(el.get("scale_y", 1)) != 1:
+            raise ValueError("HRP sprites do not support scaling")
         asset = pack_sprite(str(el["src"]), el.get("w"), el.get("h"), int(el.get("bpp", 4)))
         packed = asset.packed()
         validate_asset_size(packed.__len__())
