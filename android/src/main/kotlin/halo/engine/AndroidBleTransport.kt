@@ -89,14 +89,35 @@ class AndroidBleTransport(
 
     suspend fun sendLuaAwaitResponse(lua: String, expected: String? = null, timeoutMs: Long = 5_000): String = coroutineScope {
         val response = async(start = CoroutineStart.UNDISPATCHED) {
-            withTimeout(timeoutMs) {
-                notifications.filterIsInstance<HaloNotification.Text>().first {
-                    expected == null || it.value.trim() == expected
-                }.value.trim()
-            }
+            notifications.filterIsInstance<HaloNotification.Text>().first {
+                expected == null || it.value.trim() == expected
+            }.value.trim()
         }
         sendLua(lua)
-        response.await()
+        withTimeout(timeoutMs) { response.await() }
+    }
+
+    /**
+     * Sends a Lua command and waits for a STATUS [HaloNotification.Message] response.
+     *
+     * The device-side runtime uses `frame.bluetooth.send(string.char(STATUS) .. payload)`
+     * for flow-control acknowledgements during file uploads and startup. The firmware
+     * prefixes `frame.bluetooth.send()` output with `0x01` on LUA RX, so the router
+     * delivers it as [HaloNotification.Message] with [HaloProtocol.STATUS] code.
+     */
+    suspend fun sendLuaAwaitStatus(
+        lua: String,
+        expectedPayload: String? = null,
+        timeoutMs: Long = 5_000,
+    ): String = coroutineScope {
+        val response = async(start = CoroutineStart.UNDISPATCHED) {
+            notifications.filterIsInstance<HaloNotification.Message>().first {
+                it.code == HaloProtocol.STATUS &&
+                    (expectedPayload == null || it.payload.toString(Charsets.UTF_8).trim() == expectedPayload)
+            }.payload.toString(Charsets.UTF_8).trim()
+        }
+        sendLua(lua)
+        withTimeout(timeoutMs) { response.await() }
     }
 
     override suspend fun sendMessage(code: Int, payload: ByteArray) {

@@ -35,31 +35,9 @@ class HaloNotificationRouter {
                 bytes.contentEquals(byteArrayOf(0x00, 0x01)) -> acknowledgements.trySend(HaloAck.FAILURE)
             data != null && data.isNotEmpty() ->
                 _notifications.tryEmit(HaloNotification.Message(data[0].toInt() and 0xff, data.copyOfRange(1, data.size)))
-            (bytes[0].toInt() and 0xff) in APP_MESSAGE_CODES ->
-                _notifications.tryEmit(HaloNotification.Message(bytes[0].toInt() and 0xff, bytes.copyOfRange(1, bytes.size)))
             bytes[0].toInt() in 0x20..0x7e ->
                 _notifications.tryEmit(HaloNotification.Text(bytes.toString(Charsets.UTF_8)))
             else -> _notifications.tryEmit(HaloNotification.Unknown(bytes.copyOf()))
         }
-    }
-
-    private companion object {
-        val APP_MESSAGE_CODES = setOf(
-            HaloProtocol.AUDIO_CHUNK,
-            HaloProtocol.AUDIO_FINAL,
-            HaloProtocol.PHOTO_JPEG,
-            HaloProtocol.PHOTO_FINAL,
-            HaloProtocol.TAP,
-            HaloProtocol.BUTTON,
-            HaloProtocol.CAPTURE_PHOTO,
-            HaloProtocol.MICROPHONE_START,
-            HaloProtocol.MICROPHONE_STOP,
-            HaloProtocol.SPEAKER_START,
-            HaloProtocol.SPEAKER_STOP,
-            HaloProtocol.HRP,
-            HaloProtocol.STATUS,
-            HaloProtocol.ERROR,
-            HaloProtocol.DEVICE_STATUS,
-        )
     }
 }

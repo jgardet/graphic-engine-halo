@@ -34,9 +34,9 @@ class AndroidBleTransportTest {
         transport.sendMessage(0x60, ByteArray(250))
 
         assertEquals(3, fake.writes.size)
-        assertEquals(0x60, fake.writes[0][1].toInt())
-        assertEquals(0x00, fake.writes[0][2].toInt())
-        assertEquals(250, fake.writes[0][3].toInt())
+        assertEquals(0x60, fake.writes[0][1].toInt() and 0xff)
+        assertEquals(0x00, fake.writes[0][2].toInt() and 0xff)
+        assertEquals(250, fake.writes[0][3].toInt() and 0xff)
         assertTrue(fake.writes.all { it.first().toInt() == HaloProtocol.LUA_CTRL_DATA_MARKER })
     }
 
