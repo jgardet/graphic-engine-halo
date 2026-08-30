@@ -1,6 +1,8 @@
 package halo.engine
 
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
@@ -104,6 +106,29 @@ class HaloSessionTest {
     }
 
     @Test
+    fun sendsStopOnCancellation() = runTest {
+        val result = async {
+            session.collect(
+                startCode = HaloProtocol.MICROPHONE_START,
+                startPayload = byteArrayOf(),
+                stopCode = HaloProtocol.MICROPHONE_STOP,
+                chunkCode = HaloProtocol.AUDIO_CHUNK,
+                finalCode = HaloProtocol.AUDIO_FINAL,
+                timeout = 5.seconds,
+                maxBytes = 1_000,
+            )
+        }
+
+        // Let the collection start before cancelling it.
+        delay(10)
+        result.cancelAndJoin()
+
+        assertEquals(2, transport.dataChunks.size)
+        assertEquals(HaloProtocol.MICROPHONE_START, transport.dataChunks[0][0].toInt() and 0xff)
+        assertEquals(HaloProtocol.MICROPHONE_STOP, transport.dataChunks[1][0].toInt() and 0xff)
+    }
+
+    @Test
     fun noStopCodeWhenNotProvided() = runTest {
         val result = async {
             session.collect(
@@ -123,5 +148,26 @@ class HaloSessionTest {
 
         assertContentEquals(byteArrayOf(0xff.toByte(), 0xd8.toByte()), result.await())
         assertEquals(1, transport.dataChunks.size)
+    }
+
+    @Test
+    fun stopsAndReturnsEmptyWhenFinalArrivesWithoutChunks() = runTest {
+        val result = async {
+            session.collect(
+                startCode = HaloProtocol.CAPTURE_PHOTO,
+                startPayload = byteArrayOf(4, 0, 1, 0, 0x5c, 0, 0),
+                chunkCode = HaloProtocol.PHOTO_JPEG,
+                finalCode = HaloProtocol.PHOTO_FINAL,
+                timeout = 5.seconds,
+                maxBytes = 1_000,
+            )
+        }
+
+        launch {
+            delay(10)
+            transport.emitMessage(HaloProtocol.PHOTO_FINAL, byteArrayOf())
+        }
+
+        assertTrue(result.await().isEmpty())
     }
 }
