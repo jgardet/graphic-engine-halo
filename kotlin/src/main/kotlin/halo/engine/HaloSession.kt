@@ -2,11 +2,14 @@ package halo.engine
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
@@ -68,6 +71,11 @@ class HaloSession(
      *
      * If [maxBytes] is exceeded while collecting chunks, the session is aborted
      * and [HaloLimitException] is thrown so the device can be released.
+     *
+     * If [stopAfter] is set, [stopCode] is sent after that duration while
+     * collection continues until [finalCode] arrives or [timeout] elapses. This
+     * is required for microphone captures where the runtime only emits the final
+     * frame after it has stopped recording.
      */
     suspend fun collect(
         startCode: Int,
@@ -78,11 +86,13 @@ class HaloSession(
         finalCode: Int,
         timeout: Duration,
         maxBytes: Long = Long.MAX_VALUE,
+        stopAfter: Duration? = null,
     ): ByteArray = coroutineScope {
         currentCoroutineContext().ensureActive()
         val finalSignal = CompletableDeferred<Unit>()
         val output = ByteArrayOutputStream()
         var written: Long = 0
+        var stopJob: Job? = null
 
         val collector = async {
             messages
@@ -106,12 +116,23 @@ class HaloSession(
 
         try {
             send(startCode, startPayload)
+            if (stopCode != null && stopAfter != null) {
+                stopJob = launch {
+                    delay(stopAfter)
+                    if (!finalSignal.isCompleted) {
+                        runCatching { send(stopCode, stopPayload) }
+                    }
+                }
+            }
             withTimeout(timeout) { finalSignal.await() }
             output.toByteArray()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } finally {
-            stopCode?.let { runCatching { send(it, stopPayload) } }
+            stopJob?.cancel()
+            if (stopAfter == null) {
+                stopCode?.let { runCatching { send(it, stopPayload) } }
+            }
             collector.cancel()
         }
     }

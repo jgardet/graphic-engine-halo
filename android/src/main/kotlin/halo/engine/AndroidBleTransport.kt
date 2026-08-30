@@ -183,7 +183,6 @@ class BluetoothGattChannel(
     private val callbacks: Callbacks,
 ) : GattChannel {
     private val dataWriteResults = Channel<Int>(Channel.UNLIMITED)
-    private val audioWritePermits = Channel<Unit>(MAX_IN_FLIGHT_AUDIO_WRITES)
     private val descriptorResults = Channel<Int>(Channel.UNLIMITED)
     override val notifications = Channel<ByteArray>(Channel.UNLIMITED)
     override val connectionEvents = Channel<Boolean>(Channel.CONFLATED)
@@ -224,7 +223,6 @@ class BluetoothGattChannel(
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
             when (characteristic.uuid) {
                 BluetoothGattChannel.TX_UUID -> channel?.dataWriteResults?.trySend(status)
-                BluetoothGattChannel.AUDIO_TX_UUID -> channel?.audioWritePermits?.tryReceive()
                 else -> Unit
             }
         }
@@ -294,25 +292,18 @@ class BluetoothGattChannel(
     override suspend fun writeAudio(bytes: ByteArray) {
         val audio = audioTx ?: throw IllegalStateException("AUDIO_TX is not available on this device")
         require(bytes.size <= mtu - 3) { "Audio frame ${bytes.size} exceeds MTU payload ${mtu - 3}" }
-        try {
-            // Acquire an in-flight permit. onCharacteristicWrite for AUDIO_TX
-            // releases it, bounding the number of unacknowledged writes.
-            audioWritePermits.send(Unit)
-            val accepted = gatt.writeCharacteristic(
-                audio,
-                bytes,
-                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
-            ) == BluetoothStatusCodes.SUCCESS
-            check(accepted) { "BluetoothGatt rejected AUDIO_TX write" }
-        } catch (cancelled: CancellationException) {
-            audioWritePermits.tryReceive()
-            throw cancelled
-        } catch (error: Throwable) {
-            audioWritePermits.tryReceive()
-            throw error
-        }
-        // The callback onCharacteristicWrite will release the permit; we do
-        // not block here so the speaker can stream with bounded concurrency.
+
+        // Audio frames are sent with WRITE_TYPE_NO_RESPONSE. Android does not
+        // reliably issue onCharacteristicWrite for no-response writes, so we
+        // cannot use that callback to pace the stream. Pacing is enforced by
+        // the caller (e.g., a fixed delay between frames in playAudio), and we
+        // only verify that BluetoothGatt accepted the write request.
+        val accepted = gatt.writeCharacteristic(
+            audio,
+            bytes,
+            BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
+        ) == BluetoothStatusCodes.SUCCESS
+        check(accepted) { "BluetoothGatt rejected AUDIO_TX write" }
     }
 
     override suspend fun close() {
@@ -336,12 +327,5 @@ class BluetoothGattChannel(
         val RX_UUID: UUID = UUID.fromString("7a230003-5475-a6a4-654c-8431f6ad49c4")
         val AUDIO_TX_UUID: UUID = UUID.fromString("7a230005-5475-a6a4-654c-8431f6ad49c4")
         val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
-
-        /**
-         * Maximum number of audio TX writes that may be in flight before the
-         * next `writeAudio` suspends. This paces speaker output so the Android
-         * GATT queue does not overrun while still allowing a small buffer.
-         */
-        const val MAX_IN_FLIGHT_AUDIO_WRITES = 8
     }
 }
