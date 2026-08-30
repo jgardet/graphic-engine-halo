@@ -7,7 +7,7 @@ import android.bluetooth.BluetoothGattCharacteristic
 import android.bluetooth.BluetoothGattDescriptor
 import android.bluetooth.BluetoothGattService
 import android.bluetooth.BluetoothStatusCodes
-import android.os.Build
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.CoroutineStart
@@ -20,8 +20,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.filterIsInstance
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -44,6 +46,10 @@ class AndroidBleTransport(
     private val writeMutex = Mutex()
     private val notificationScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val notifications: SharedFlow<HaloNotification> = router.notifications
+    override val messages: Flow<HaloMessage> =
+        notifications
+            .filterIsInstance<HaloNotification.Message>()
+            .map { HaloMessage(it.code, it.payload) }
 
     init {
         notificationScope.launch {
@@ -58,10 +64,13 @@ class AndroidBleTransport(
         get() = channel.mtu.coerceAtMost(512) - 3
     override val maxDataPayload: Int
         get() = channel.mtu.coerceAtMost(512) - 4
+    override val supportsAudio: Boolean
+        get() = channel.supportsAudio
 
     override suspend fun connect(name: String?) {
         channel.discoverAndEnableNotifications()
         channel.requestMtu(512)
+        channel.requestConnectionPriority(BluetoothGatt.CONNECTION_PRIORITY_HIGH)
     }
 
     override suspend fun disconnect() {
@@ -81,14 +90,35 @@ class AndroidBleTransport(
 
     suspend fun sendLuaAwaitResponse(lua: String, expected: String? = null, timeoutMs: Long = 5_000): String = coroutineScope {
         val response = async(start = CoroutineStart.UNDISPATCHED) {
-            withTimeout(timeoutMs) {
-                notifications.filterIsInstance<HaloNotification.Text>().first {
-                    expected == null || it.value.trim() == expected
-                }.value.trim()
-            }
+            notifications.filterIsInstance<HaloNotification.Text>().first {
+                expected == null || it.value.trim() == expected
+            }.value.trim()
         }
         sendLua(lua)
-        response.await()
+        withTimeout(timeoutMs) { response.await() }
+    }
+
+    /**
+     * Sends a Lua command and waits for a STATUS [HaloNotification.Message] response.
+     *
+     * The device-side runtime uses `frame.bluetooth.send(string.char(STATUS) .. payload)`
+     * for flow-control acknowledgements during file uploads and startup. The firmware
+     * prefixes `frame.bluetooth.send()` output with `0x01` on LUA RX, so the router
+     * delivers it as [HaloNotification.Message] with [HaloProtocol.STATUS] code.
+     */
+    suspend fun sendLuaAwaitStatus(
+        lua: String,
+        expectedPayload: String? = null,
+        timeoutMs: Long = 5_000,
+    ): String = coroutineScope {
+        val response = async(start = CoroutineStart.UNDISPATCHED) {
+            notifications.filterIsInstance<HaloNotification.Message>().first {
+                it.code == HaloProtocol.STATUS &&
+                    (expectedPayload == null || it.payload.toString(Charsets.UTF_8).trim() == expectedPayload)
+            }.payload.toString(Charsets.UTF_8).trim()
+        }
+        sendLua(lua)
+        withTimeout(timeoutMs) { response.await() }
     }
 
     override suspend fun sendMessage(code: Int, payload: ByteArray) {
@@ -113,10 +143,15 @@ class AndroidBleTransport(
         writeMutex.withLock { sendDataPacket(bytes) }
     }
 
+    override suspend fun sendAudioFrame(frame: ByteArray) {
+        require(frame.size <= maxDataPayload) { "Audio frame ${frame.size} exceeds max payload $maxDataPayload" }
+        writeMutex.withLock { channel.writeAudio(frame) }
+    }
+
     private suspend fun sendDataPacket(packet: ByteArray) {
         require(packet.size <= maxDataPayload)
         while (router.acknowledgements.tryReceive().isSuccess) Unit
-        channel.write(byteArrayOf(DATA_MARKER) + packet)
+        channel.write(byteArrayOf(HaloProtocol.LUA_CTRL_DATA_MARKER.toByte()) + packet)
         val ack = try {
             withTimeout(ackTimeoutMs) { router.acknowledgements.receive() }
         } catch (timeout: TimeoutCancellationException) {
@@ -125,10 +160,6 @@ class AndroidBleTransport(
         }
         check(ack == HaloAck.SUCCESS) { "Halo rejected data packet" }
     }
-
-    companion object {
-        const val DATA_MARKER: Byte = 0x01
-    }
 }
 
 /** Callback-neutral interface used by AndroidBleTransport and instrumentation fakes. */
@@ -136,9 +167,12 @@ interface GattChannel {
     val mtu: Int
     val notifications: Channel<ByteArray>
     val connectionEvents: Channel<Boolean>
+    val supportsAudio: Boolean
     suspend fun discoverAndEnableNotifications()
     suspend fun requestMtu(desired: Int)
+    suspend fun requestConnectionPriority(priority: Int): Boolean
     suspend fun write(bytes: ByteArray)
+    suspend fun writeAudio(bytes: ByteArray)
     suspend fun close()
 }
 
@@ -148,7 +182,8 @@ class BluetoothGattChannel(
     private val gatt: BluetoothGatt,
     private val callbacks: Callbacks,
 ) : GattChannel {
-    private val writeResults = Channel<Int>(Channel.UNLIMITED)
+    private val dataWriteResults = Channel<Int>(Channel.UNLIMITED)
+    private val audioWritePermits = Channel<Unit>(MAX_IN_FLIGHT_AUDIO_WRITES)
     private val descriptorResults = Channel<Int>(Channel.UNLIMITED)
     override val notifications = Channel<ByteArray>(Channel.UNLIMITED)
     override val connectionEvents = Channel<Boolean>(Channel.CONFLATED)
@@ -187,16 +222,15 @@ class BluetoothGattChannel(
         }
 
         override fun onCharacteristicWrite(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, status: Int) {
-            channel?.writeResults?.trySend(status)
+            when (characteristic.uuid) {
+                BluetoothGattChannel.TX_UUID -> channel?.dataWriteResults?.trySend(status)
+                BluetoothGattChannel.AUDIO_TX_UUID -> channel?.audioWritePermits?.tryReceive()
+                else -> Unit
+            }
         }
 
         override fun onDescriptorWrite(gatt: BluetoothGatt, descriptor: BluetoothGattDescriptor, status: Int) {
             channel?.descriptorResults?.trySend(status)
-        }
-
-        @Deprecated("Use the API 33 callback on Android 13+")
-        override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic) {
-            channel?.notifications?.trySend(characteristic.value ?: byteArrayOf())
         }
 
         override fun onCharacteristicChanged(gatt: BluetoothGatt, characteristic: BluetoothGattCharacteristic, value: ByteArray) {
@@ -208,6 +242,7 @@ class BluetoothGattChannel(
     internal var mtuResults = CompletableDeferred<Pair<Int, Int>>()
     private val tx: BluetoothGattCharacteristic by lazy { requireCharacteristic(TX_UUID) }
     private val rx: BluetoothGattCharacteristic by lazy { requireCharacteristic(RX_UUID) }
+    private val audioTx: BluetoothGattCharacteristic? by lazy { optionalCharacteristic(AUDIO_TX_UUID) }
 
     override suspend fun discoverAndEnableNotifications() {
         serviceResults = CompletableDeferred()
@@ -217,19 +252,18 @@ class BluetoothGattChannel(
         }
         val descriptor = requireNotNull(rx.getDescriptor(CCCD_UUID)) { "Halo notification descriptor is missing" }
         check(gatt.setCharacteristicNotification(rx, true)) { "Unable to enable Halo notifications" }
-        val accepted = if (Build.VERSION.SDK_INT >= 33) {
-            gatt.writeDescriptor(descriptor, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE) == BluetoothStatusCodes.SUCCESS
-        } else {
-            @Suppress("DEPRECATION")
-            descriptor.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-            @Suppress("DEPRECATION")
-            gatt.writeDescriptor(descriptor)
-        }
+        val accepted = gatt.writeDescriptor(
+            descriptor,
+            BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE,
+        ) == BluetoothStatusCodes.SUCCESS
         check(accepted) { "BluetoothGatt rejected notification descriptor write" }
         check(withTimeout(5_000) { descriptorResults.receive() } == BluetoothGatt.GATT_SUCCESS) {
             "Halo notification descriptor write failed"
         }
     }
+
+    override val supportsAudio: Boolean
+        get() = audioTx != null
 
     override suspend fun requestMtu(desired: Int) {
         mtuResults = CompletableDeferred()
@@ -239,18 +273,46 @@ class BluetoothGattChannel(
         mtu = negotiated
     }
 
+    override suspend fun requestConnectionPriority(priority: Int): Boolean {
+        return gatt.requestConnectionPriority(priority)
+    }
+
     override suspend fun write(bytes: ByteArray) {
-        val accepted = if (Build.VERSION.SDK_INT >= 33) {
-            gatt.writeCharacteristic(tx, bytes, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT) == BluetoothStatusCodes.SUCCESS
-        } else {
-            @Suppress("DEPRECATION")
-            tx.value = bytes
-            @Suppress("DEPRECATION")
-            gatt.writeCharacteristic(tx)
-        }
+        // Drain any status that belongs to a previous write so it cannot
+        // satisfy this waiter's receive() call.
+        while (dataWriteResults.tryReceive().isSuccess) Unit
+        val accepted = gatt.writeCharacteristic(
+            tx,
+            bytes,
+            BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT,
+        ) == BluetoothStatusCodes.SUCCESS
         check(accepted) { "BluetoothGatt rejected write" }
-        val status = withTimeout(5_000) { writeResults.receive() }
+        val status = withTimeout(5_000) { dataWriteResults.receive() }
         check(status == BluetoothGatt.GATT_SUCCESS) { "Halo write failed: $status" }
+    }
+
+    override suspend fun writeAudio(bytes: ByteArray) {
+        val audio = audioTx ?: throw IllegalStateException("AUDIO_TX is not available on this device")
+        require(bytes.size <= mtu - 3) { "Audio frame ${bytes.size} exceeds MTU payload ${mtu - 3}" }
+        try {
+            // Acquire an in-flight permit. onCharacteristicWrite for AUDIO_TX
+            // releases it, bounding the number of unacknowledged writes.
+            audioWritePermits.send(Unit)
+            val accepted = gatt.writeCharacteristic(
+                audio,
+                bytes,
+                BluetoothGattCharacteristic.WRITE_TYPE_NO_RESPONSE,
+            ) == BluetoothStatusCodes.SUCCESS
+            check(accepted) { "BluetoothGatt rejected AUDIO_TX write" }
+        } catch (cancelled: CancellationException) {
+            audioWritePermits.tryReceive()
+            throw cancelled
+        } catch (error: Throwable) {
+            audioWritePermits.tryReceive()
+            throw error
+        }
+        // The callback onCharacteristicWrite will release the permit; we do
+        // not block here so the speaker can stream with bounded concurrency.
     }
 
     override suspend fun close() {
@@ -263,10 +325,23 @@ class BluetoothGattChannel(
         return requireNotNull(service.getCharacteristic(uuid)) { "Halo characteristic not discovered: $uuid" }
     }
 
+    private fun optionalCharacteristic(uuid: UUID): BluetoothGattCharacteristic? {
+        val service: BluetoothGattService? = gatt.getService(SERVICE_UUID)
+        return service?.getCharacteristic(uuid)
+    }
+
     companion object {
         val SERVICE_UUID: UUID = UUID.fromString("7a230001-5475-a6a4-654c-8431f6ad49c4")
         val TX_UUID: UUID = UUID.fromString("7a230002-5475-a6a4-654c-8431f6ad49c4")
         val RX_UUID: UUID = UUID.fromString("7a230003-5475-a6a4-654c-8431f6ad49c4")
+        val AUDIO_TX_UUID: UUID = UUID.fromString("7a230005-5475-a6a4-654c-8431f6ad49c4")
         val CCCD_UUID: UUID = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+
+        /**
+         * Maximum number of audio TX writes that may be in flight before the
+         * next `writeAudio` suspends. This paces speaker output so the Android
+         * GATT queue does not overrun while still allowing a small buffer.
+         */
+        const val MAX_IN_FLIGHT_AUDIO_WRITES = 8
     }
 }

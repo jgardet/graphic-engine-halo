@@ -5,10 +5,10 @@ plugins {
 
 android {
     namespace = "halo.engine.android"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
-        minSdk = 26
+        minSdk = 33
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")
     }
@@ -28,10 +28,10 @@ android {
 
 dependencies {
     api(project(":kotlin"))
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
-    implementation("androidx.annotation:annotation:1.9.1")
-    androidTestImplementation("androidx.test:runner:1.6.2")
-    androidTestImplementation("androidx.test:core:1.6.1")
-    androidTestImplementation("androidx.test.ext:junit:1.2.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
+    implementation("androidx.annotation:annotation:1.10.0")
+    androidTestImplementation("androidx.test:runner:1.7.0")
+    androidTestImplementation("androidx.test:core:1.7.0")
+    androidTestImplementation("androidx.test.ext:junit:1.3.0")
     androidTestImplementation(kotlin("test"))
 }

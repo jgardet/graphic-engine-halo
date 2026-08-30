@@ -87,7 +87,7 @@ class HsdValidator(
                 }
                 "polygon" -> {
                     val points = obj["points"] as? JsonArray ?: fail("polygon.points must be an array")
-                    require(points.size in 2..limits.maxPolygonPoints) { "Polygon must contain 2..${limits.maxPolygonPoints} points" }
+                    require(points.size in 3..limits.maxPolygonPoints) { "Polygon must contain 3..${limits.maxPolygonPoints} points" }
                     points.forEach {
                         val point = it as? JsonArray ?: fail("Polygon point must be an array")
                         require(point.size == 2) { "Polygon point must contain x and y" }
@@ -109,7 +109,7 @@ class HsdValidator(
                     obj.optionalInt("h")?.let { require(it > 0 && it <= height) { "Invalid sprite height" } }
                     require(obj.int("bpp", 4) in setOf(1, 2, 4)) { "Sprite bpp must be 1, 2, or 4" }
                     require(obj.int("palette_offset", 0) in 0..15) { "Sprite palette_offset must be 0..15" }
-                    require(obj.int("scale_x", 1) == 1 && obj.int("scale_y", 1) == 1) { "HRP sprites do not support scaling" }
+                    require(obj.int("scale_x", 1) == 1 && obj.int("scale_y", 1) == 1) { "runtime/HRP sprites do not support scaling (use 1 or switch to repl mode)" }
                     require(obj.int("resource_id", 1) in 1..0xFFFF) { "Sprite resource_id must be 1..65535" }
                 }
                 else -> fail("Unknown HSD element type: $type")

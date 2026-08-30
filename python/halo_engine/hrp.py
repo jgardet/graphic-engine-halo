@@ -93,8 +93,8 @@ class HrpBuilder:
 
     def polygon(self, points: Iterable[tuple[int, int]], color: str | int) -> "HrpBuilder":
         points = tuple(points)
-        if len(points) > 64:
-            raise ValueError("Halo supports at most 64 polygon points")
+        if not 3 <= len(points) <= 64:
+            raise ValueError("Halo supports 3..64 polygon points")
         payload = bytes((len(points),)) + b"".join(_u16(x) + _u16(y) for x, y in points) + _color(color)
         return self.add(POLYGON, payload)
 

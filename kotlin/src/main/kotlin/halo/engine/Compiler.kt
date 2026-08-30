@@ -166,7 +166,7 @@ class HaloCompiler(private val packer: SpritePacker = StubSpritePacker()) {
         el["children"]?.jsonArray?.forEach { child ->
             val c = child.jsonObject
             compileElement(c, currentX, y)
-            currentX += estimateWidth(c) + spacing
+            currentX += HsdLayout.estimateWidth(c) + spacing
         }
     }
 
@@ -178,7 +178,7 @@ class HaloCompiler(private val packer: SpritePacker = StubSpritePacker()) {
         el["children"]?.jsonArray?.forEach { child ->
             val c = child.jsonObject
             compileElement(c, x, currentY)
-            currentY += estimateHeight(c) + spacing
+            currentY += HsdLayout.estimateHeight(c) + spacing
         }
     }
 
@@ -203,69 +203,4 @@ class HaloCompiler(private val packer: SpritePacker = StubSpritePacker()) {
     }
 
     private fun hexEscape(data: ByteArray): String = data.joinToString("") { "\\x%02X".format(it.toInt() and 0xff) }
-
-    private fun packIndexedPixels(indices: ByteArray, bpp: Int): ByteArray {
-        return when (bpp) {
-            1 -> {
-                val out = mutableListOf<Byte>()
-                var byte: Byte = 0
-                for (i in indices.indices) {
-                    val bit = 7 - (i % 8)
-                    if (indices[i].toInt() and 1 == 1) {
-                        byte = (byte.toInt() or (1 shl bit)).toByte()
-                    }
-                    if (i % 8 == 7) {
-                        out.add(byte)
-                        byte = 0
-                    }
-                }
-                if (indices.size % 8 != 0) out.add(byte)
-                out.toByteArray()
-            }
-            2 -> {
-                val out = mutableListOf<Byte>()
-                for (i in indices.indices step 4) {
-                    var b = 0
-                    for (j in 0..3) {
-                        if (i + j < indices.size) {
-                            val shift = (3 - j) * 2
-                            b = b or ((indices[i + j].toInt() and 0x03) shl shift)
-                        }
-                    }
-                    out.add(b.toByte())
-                }
-                out.toByteArray()
-            }
-            else -> { // 4
-                val out = mutableListOf<Byte>()
-                for (i in indices.indices step 2) {
-                    var b = 0
-                    if (i < indices.size) b = b or ((indices[i].toInt() and 0x0F) shl 4)
-                    if (i + 1 < indices.size) b = b or (indices[i + 1].toInt() and 0x0F)
-                    out.add(b.toByte())
-                }
-                out.toByteArray()
-            }
-        }
-    }
-
-    private fun estimateWidth(el: JsonObject): Int {
-        el["w"]?.jsonPrimitive?.intOrNull?.let { return it }
-        return when (el["type"]?.jsonPrimitive?.content?.lowercase()) {
-            "text" -> (el["text"]?.jsonPrimitive?.content?.length ?: 0) * (el["size"]?.jsonPrimitive?.intOrNull ?: 8) / 2
-            "circle" -> (el["r"]?.jsonPrimitive?.intOrNull ?: 0) * 2
-            "rect" -> el["w"]?.jsonPrimitive?.intOrNull ?: 0
-            else -> 16
-        }
-    }
-
-    private fun estimateHeight(el: JsonObject): Int {
-        el["h"]?.jsonPrimitive?.intOrNull?.let { return it }
-        return when (el["type"]?.jsonPrimitive?.content?.lowercase()) {
-            "text" -> el["size"]?.jsonPrimitive?.intOrNull ?: 8
-            "circle" -> (el["r"]?.jsonPrimitive?.intOrNull ?: 0) * 2
-            "rect" -> el["h"]?.jsonPrimitive?.intOrNull ?: 0
-            else -> 16
-        }
-    }
 }

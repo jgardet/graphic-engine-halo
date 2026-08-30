@@ -9,10 +9,9 @@ import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.util.zip.CRC32
 
 class HsdHrpCompiler(
-    private val packer: SpritePacker = StubSpritePacker(),
+    private val packer: SpritePacker,
     private val limits: HaloLimits = StockHaloLimits,
     private val validator: HsdValidator = HsdValidator(limits),
 ) {
@@ -20,22 +19,22 @@ class HsdHrpCompiler(
         validator.validate(document)
         val root = document.jsonObject["scene"]!!.jsonObject
         val builder = HrpBuilder(limits.maxHrpMessageBytes)
-        val defined = mutableMapOf<Int, String>()
+        val sprites = SpriteRegistry()
         builder.clear(root["bg"] ?: "#000000")
         root["brightness"]?.jsonPrimitive?.intOrNull?.let(builder::brightness)
-        root["children"]?.jsonArray?.forEach { compileElement(it.jsonObject, builder, 0, 0, defined) }
+        root["children"]?.jsonArray?.forEach { compileElement(it.jsonObject, builder, 0, 0, sprites) }
         val payload = builder.endFrame().build()
         validateHrpMessage(payload, limits)
         return payload
     }
 
-    private fun compileElement(element: JsonObject, builder: HrpBuilder, dx: Int, dy: Int, defined: MutableMap<Int, String>) {
+    private fun compileElement(element: JsonObject, builder: HrpBuilder, dx: Int, dy: Int, sprites: SpriteRegistry) {
         if (element["visible"]?.jsonPrimitive?.booleanOrNull == false) return
         when (element.string("type")) {
             "group" -> {
                 val x = dx + element.int("x", 0)
                 val y = dy + element.int("y", 0)
-                element.children().forEach { compileElement(it.jsonObject, builder, x, y, defined) }
+                element.children().forEach { compileElement(it.jsonObject, builder, x, y, sprites) }
             }
             "row" -> {
                 var x = dx + element.int("x", 0)
@@ -43,8 +42,8 @@ class HsdHrpCompiler(
                 val spacing = element.int("spacing", 0)
                 element.children().forEach {
                     val child = it.jsonObject
-                    compileElement(child, builder, x, y, defined)
-                    x += estimateWidth(child) + spacing
+                    compileElement(child, builder, x, y, sprites)
+                    x += HsdLayout.estimateWidth(child) + spacing
                 }
             }
             "column" -> {
@@ -53,8 +52,8 @@ class HsdHrpCompiler(
                 val spacing = element.int("spacing", 0)
                 element.children().forEach {
                     val child = it.jsonObject
-                    compileElement(child, builder, x, y, defined)
-                    y += estimateHeight(child) + spacing
+                    compileElement(child, builder, x, y, sprites)
+                    y += HsdLayout.estimateHeight(child) + spacing
                 }
             }
             "text" -> {
@@ -97,10 +96,8 @@ class HsdHrpCompiler(
             )
             "sprite" -> {
                 val src = element.string("src")
-                val id = element["resource_id"]?.jsonPrimitive?.intOrNull ?: stableResourceId(src)
-                val previous = defined.putIfAbsent(id, src)
-                require(previous == null || previous == src) { "Sprite resource ID $id is used by multiple sources" }
-                if (previous == null) {
+                val (id, isNew) = sprites.assign(src, element["resource_id"]?.jsonPrimitive?.intOrNull)
+                if (isNew) {
                     val sprite = packer.pack(
                         src,
                         element["w"]?.jsonPrimitive?.intOrNull,
@@ -116,9 +113,39 @@ class HsdHrpCompiler(
         }
     }
 
-    private fun stableResourceId(src: String): Int = 1 + (CRC32().apply {
-        update(src.toByteArray(Charsets.UTF_8))
-    }.value % 65_534).toInt()
+    /**
+     * Assigns sequential 16-bit resource IDs to sprite sources.
+     * Explicit `resource_id` values are validated against collisions;
+     * auto-generated IDs are unique and stable for the compile pass.
+     */
+    private class SpriteRegistry {
+        private val srcToId = mutableMapOf<String, Int>()
+        private val idToSrc = mutableMapOf<Int, String>()
+        private var nextId = 1
+
+        fun assign(src: String, explicitId: Int? = null): Pair<Int, Boolean> {
+            if (explicitId != null) {
+                val previous = idToSrc[explicitId]
+                require(previous == null || previous == src) {
+                    "Sprite resource ID $explicitId is used by multiple sources"
+                }
+                if (previous == null) {
+                    idToSrc[explicitId] = src
+                    srcToId[src] = explicitId
+                }
+                return explicitId to (previous == null)
+            }
+
+            val existing = srcToId[src]
+            if (existing != null) return existing to false
+
+            while (idToSrc.containsKey(nextId)) nextId++
+            val id = nextId++
+            idToSrc[id] = src
+            srcToId[src] = id
+            return id to true
+        }
+    }
 
     private fun JsonObject.children(): JsonArray = this["children"]!!.jsonArray
 
@@ -127,16 +154,4 @@ class HsdHrpCompiler(
 
     private fun JsonObject.int(key: String, default: Int? = null): Int =
         this[key]?.jsonPrimitive?.intOrNull ?: default ?: error("Missing integer $key")
-
-    private fun estimateWidth(element: JsonObject): Int = element["w"]?.jsonPrimitive?.intOrNull ?: when (element.string("type")) {
-        "text" -> element.string("text", "").length * element.int("size", 8) / 2
-        "circle" -> element.int("r", 0) * 2
-        else -> 16
-    }
-
-    private fun estimateHeight(element: JsonObject): Int = element["h"]?.jsonPrimitive?.intOrNull ?: when (element.string("type")) {
-        "text" -> element.int("size", 8)
-        "circle" -> element.int("r", 0) * 2
-        else -> 16
-    }
 }

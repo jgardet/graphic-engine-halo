@@ -4,7 +4,7 @@
 
 Halo is an open-source pair of smart glasses with an integrated near-eye color display, camera, microphones, bone-conduction speakers, motion sensors, a low-power processor, and Bluetooth LE connectivity. Its 0.2-inch OLEDoS display is mounted in the frame and optically presented in the wearer’s peripheral view.
 
-> **Status:** research prototype. Stock-firmware compatibility is the baseline. Physical-Halo validation and Android device testing remain outstanding.
+> **Status:** research prototype. M1 agent-senses blockers (request IDs, microphone gain/photo quality wire encoding, streaming byte bounds, audio write pacing, and regression coverage) are closed on feature branches and pass unit/lint/Node tests. Physical-Halo validation, callback/throughput measurements, and Android device testing remain outstanding.
 
 ## Problem
 
@@ -43,6 +43,17 @@ Halo Scene Description (HSD), a JSON scene graph
 HSD uses familiar scene-graph concepts: text, shapes, groups, rows, columns, and sprites. The compiler handles coordinate conversion, colors, font constraints, indexed sprite packing, resource IDs, and size validation.
 
 HRP is a compact binary protocol carried inside the official Brilliant data-message framing. It reduces Lua source and parsing overhead while using existing `frame.display.*` APIs. It does not claim to add alpha blending, rotation, layers, double buffering, or other capabilities absent from stock firmware.
+
+### Non-visual streaming
+
+The same message layer also powers agent-facing device capabilities: microphone capture, photo capture, speaker playback, battery status, and tap/button input. The engine exposes:
+
+- `HaloMessage` and `HaloSession` for request/response and chunk-based streaming with cancellation and bounded collection.
+- `HaloLimitException` to abort streaming when a per-operation byte ceiling is exceeded.
+- `BluetoothGattChannel` for the Android BLE transport, including bounded in-flight audio write pacing so `WRITE_TYPE_NO_RESPONSE` speaker frames stream without blocking on every callback.
+- `lua/he_runtime.lua` as the device-side dispatcher for microphone, speaker, camera, battery, and input events.
+
+These abstractions live in `kotlin/` and `android/` and are consumed by the `dsh-android` agent-senses layer.
 
 ## Why Python, Kotlin, and Lua?
 
@@ -138,9 +149,9 @@ The Venus source image is a Wikimedia Commons image used as a public-domain imag
 scenes/                 HSD examples and image assets
 python/halo_engine/     Python compiler, HRP, sprites, MCP, atlas, and diffs
 python/tests/            Python and emulator tests
-kotlin/                 Kotlin/JVM compiler and host abstractions
-android/                Android library and BluetoothGatt transport
-lua/                    Device-side HRP runtime
+kotlin/                 Kotlin/JVM compiler, `HaloSession`, and host abstractions
+android/                Android library, BluetoothGatt transport, and audio pacing
+lua/                    Device-side HRP runtime and non-visual capability dispatcher
 ```
 
 ## Scope and limitations

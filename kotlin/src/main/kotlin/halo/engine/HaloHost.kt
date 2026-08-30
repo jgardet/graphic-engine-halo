@@ -5,15 +5,9 @@ import kotlinx.serialization.json.JsonElement
 /** High-level host runtime using official message framing for binary rendering. */
 class HaloHost(
     private val transport: HaloBleTransport,
+    private val hrpCompiler: HsdHrpCompiler,
     private val limits: HaloLimits = StockHaloLimits,
-    private val compiler: HaloCompiler = HaloCompiler(),
-    private val hrpCompiler: HsdHrpCompiler = HsdHrpCompiler(limits = limits),
 ) {
-    suspend fun show(scene: JsonElement) {
-        val lua = compiler.compile(scene)
-        sendLua(lua)
-    }
-
     suspend fun showScene(scene: JsonElement, code: Int = HaloProtocol.HRP) {
         showHrp(hrpCompiler.compile(scene), code)
     }
@@ -50,22 +44,6 @@ class HaloHost(
                 .put(sprite.numColors.toByte())
                 .array()
             return header + sprite.paletteData + bits
-        }
-
-        fun packIndexedPixels(indices: ByteArray, bpp: Int): ByteArray {
-            require(bpp == 1 || bpp == 2 || bpp == 4)
-            val out = java.io.ByteArrayOutputStream()
-            val perByte = 8 / bpp
-            for (start in indices.indices step perByte) {
-                var value = 0
-                for (j in 0 until perByte) {
-                    if (start + j < indices.size) {
-                        value = value or ((indices[start + j].toInt() and ((1 shl bpp) - 1)) shl ((perByte - j - 1) * bpp))
-                    }
-                }
-                out.write(value)
-            }
-            return out.toByteArray()
         }
     }
 }

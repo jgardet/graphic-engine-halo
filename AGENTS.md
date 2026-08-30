@@ -39,3 +39,8 @@ gradle :kotlin:test                     # Kotlin
 - For `runtime` mode, the device-side `lua/he_runtime.lua` must be uploaded first.
 - Always verify generated Lua in the `halo_emulator` before shipping to hardware.
 - The `brilliant_sdk/` and `halo-firmware/` directories are reference vendored repos.
+- Non-visual streaming (mic, photo, battery, etc.) uses the engine-level
+  `HaloMessage` and `HaloSession` abstractions in `halo.engine`. Transports
+  expose a `messages: Flow<HaloMessage>` stream; `HaloSession.collect()`
+  handles chunk collection, timeout, and cancellation for any streaming
+  capability that follows the same start/chunk/final pattern.

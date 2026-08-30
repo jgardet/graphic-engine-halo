@@ -165,7 +165,7 @@ All elements support:
 | `w`, `h` | int | Target sprite size (optional, derived from image) |
 | `bpp` | int | `1`, `2`, or `4` (default `4`) |
 | `palette_offset` | int | 0–15, added to non-zero indices (default `0`) |
-| `scale_x`, `scale_y` | int | Only valid for indexed sprites, integer scale |
+| `scale_x`, `scale_y` | int | Integer scale, only supported in `repl` (Lua) mode. `runtime` (HRP) mode currently requires both to be `1`. |
 
 Sprites are quantized to ≤16 colors and transmitted as a binary asset, then drawn with `frame.display.bitmap()`.
 

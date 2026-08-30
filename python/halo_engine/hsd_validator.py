@@ -152,9 +152,9 @@ class HsdValidator:
             points = element.get("points")
             if not isinstance(points, list):
                 raise ValueError("polygon.points must be an array")
-            if not (2 <= len(points) <= self.limits.max_polygon_points):
+            if not (3 <= len(points) <= self.limits.max_polygon_points):
                 raise ValueError(
-                    f"Polygon must contain 2..{self.limits.max_polygon_points} points"
+                    f"Polygon must contain 3..{self.limits.max_polygon_points} points"
                 )
             for point in points:
                 if not isinstance(point, (list, tuple)) or len(point) != 2:
@@ -190,7 +190,7 @@ class HsdValidator:
             scale_x = element.get("scale_x", 1)
             scale_y = element.get("scale_y", 1)
             if scale_x != 1 or scale_y != 1:
-                raise ValueError("HRP sprites do not support scaling")
+                raise ValueError("runtime/HRP sprites do not support scaling (use 1 or switch to repl mode)")
             resource_id = element.get("resource_id", 1)
             if not (isinstance(resource_id, int) and 1 <= resource_id <= 0xFFFF):
                 raise ValueError("Sprite resource_id must be 1..65535")

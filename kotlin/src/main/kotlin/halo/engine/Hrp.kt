@@ -36,7 +36,7 @@ class HrpBuilder(private val maxBytes: Int = 32768) {
     fun rect(x: Int, y: Int, w: Int, h: Int, value: Any?, filled: Boolean = false): HrpBuilder = add(0x05, u16(x) + u16(y) + u16(w) + u16(h) + color(value) + byteArrayOf(if (filled) 1 else 0))
     fun circle(cx: Int, cy: Int, r: Int, value: Any?, filled: Boolean = false): HrpBuilder = add(0x06, u16(cx) + u16(cy) + u16(r) + color(value) + byteArrayOf(if (filled) 1 else 0))
     fun polygon(points: List<Pair<Int, Int>>, value: Any?): HrpBuilder {
-        require(points.size <= 64)
+        require(points.size in 3..64) { "Halo supports 3..64 polygon points" }
         val out = ByteArrayOutputStream()
         out.write(points.size)
         points.forEach { (x, y) -> out.write(u16(x)); out.write(u16(y)) }
