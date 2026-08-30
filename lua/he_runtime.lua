@@ -319,13 +319,17 @@ local function handle_message(code, payload)
     elseif code == MICROPHONE_START then
         micConfig = {}
         if #payload >= 3 then
-            local gain = string.byte(payload, 1)
-            if gain > 20 then gain = 20 end
+            -- The wire byte is the public gain value offset by +10.
+            -- Public gain range is -10..10; decode before passing to firmware.
+            local rawGain = string.byte(payload, 1)
+            local gain = rawGain - 10
+            if gain > 10 then gain = 10 end
+            if gain < -10 then gain = -10 end
             micConfig.gain = gain
             micConfig.aec = string.byte(payload, 2) ~= 0
             micConfig.voice = string.byte(payload, 3) ~= 0
         else
-            micConfig.gain = 10
+            micConfig.gain = 0
             micConfig.aec = true
             micConfig.voice = false
         end
@@ -363,6 +367,8 @@ local function handle_message(code, payload)
         pcall(frame.speaker.stop)
     elseif code == CAPTURE_PHOTO then
         if photoPending then return end
+        -- The wire quality index is 0-based (0=VERY_LOW through 4=VERY_HIGH).
+        -- QUALITIES is 1-based, so add one when looking it up.
         local quality_index = 4
         local half_res = 256
         local pan_shifted = 140
@@ -373,8 +379,9 @@ local function handle_message(code, payload)
             pan_shifted = u16(payload, 4)
             raw = string.byte(payload, 6) ~= 0
         end
-        if quality_index < 1 then quality_index = 1 elseif quality_index > 5 then quality_index = 5 end
-        local quality = QUALITIES[quality_index]
+        if quality_index < 0 then quality_index = 0 end
+        if quality_index > 4 then quality_index = 4 end
+        local quality = QUALITIES[quality_index + 1]
         local resolution = half_res * 2
         local pan = pan_shifted - 140
         local cfg = { resolution = resolution, quality = quality, pan = pan }

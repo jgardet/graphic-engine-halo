@@ -14,6 +14,12 @@ import java.io.ByteArrayOutputStream
 import kotlin.time.Duration
 
 /**
+ * Raised when a streaming session would exceed an explicit byte ceiling.
+ * This is a recoverable policy violation, not a BLE protocol or transport error.
+ */
+class HaloLimitException(message: String) : RuntimeException(message)
+
+/**
  * Generic request/response and streaming session over a [HaloBleTransport].
  *
  * This consolidates the chunk-collection logic used by microphone, camera,
@@ -59,6 +65,9 @@ class HaloSession(
      * [chunkCode] payloads into a single [ByteArray], and finish when [finalCode]
      * is received. If [stopCode] is provided, it is sent in a `finally` block so
      * the device is always released on timeout or cancellation.
+     *
+     * If [maxBytes] is exceeded while collecting chunks, the session is aborted
+     * and [HaloLimitException] is thrown so the device can be released.
      */
     suspend fun collect(
         startCode: Int,
@@ -68,10 +77,12 @@ class HaloSession(
         chunkCode: Int,
         finalCode: Int,
         timeout: Duration,
+        maxBytes: Long = Long.MAX_VALUE,
     ): ByteArray = coroutineScope {
         currentCoroutineContext().ensureActive()
         val finalSignal = CompletableDeferred<Unit>()
         val output = ByteArrayOutputStream()
+        var written: Long = 0
 
         val collector = async {
             messages
@@ -79,7 +90,15 @@ class HaloSession(
                 .collect { message ->
                     currentCoroutineContext().ensureActive()
                     when (message.code) {
-                        chunkCode -> output.write(message.payload)
+                        chunkCode -> {
+                            val chunk = message.payload
+                            val newSize = written + chunk.size
+                            if (newSize > maxBytes) {
+                                throw HaloLimitException("collected payload exceeds $maxBytes bytes")
+                            }
+                            output.write(chunk)
+                            written += chunk.size
+                        }
                         finalCode -> finalSignal.complete(Unit)
                     }
                 }

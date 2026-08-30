@@ -7,6 +7,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -75,6 +76,29 @@ class HaloSessionTest {
         }
 
         assertTrue(result.isFailure)
+        assertEquals(HaloProtocol.MICROPHONE_START, transport.dataChunks[0][0].toInt() and 0xff)
+        assertEquals(HaloProtocol.MICROPHONE_STOP, transport.dataChunks[1][0].toInt() and 0xff)
+    }
+
+    @Test
+    fun throwsHaloLimitExceptionAndSendsStopWhenMaxBytesExceeded() = runTest {
+        launch {
+            delay(10)
+            transport.emitMessage(HaloProtocol.AUDIO_CHUNK, byteArrayOf(1, 2, 3))
+            transport.emitMessage(HaloProtocol.AUDIO_CHUNK, byteArrayOf(4, 5))
+        }
+
+        assertFailsWith<HaloLimitException> {
+            session.collect(
+                startCode = HaloProtocol.MICROPHONE_START,
+                startPayload = byteArrayOf(),
+                stopCode = HaloProtocol.MICROPHONE_STOP,
+                chunkCode = HaloProtocol.AUDIO_CHUNK,
+                finalCode = HaloProtocol.AUDIO_FINAL,
+                timeout = 5.seconds,
+                maxBytes = 4,
+            )
+        }
         assertEquals(HaloProtocol.MICROPHONE_START, transport.dataChunks[0][0].toInt() and 0xff)
         assertEquals(HaloProtocol.MICROPHONE_STOP, transport.dataChunks[1][0].toInt() and 0xff)
     }
