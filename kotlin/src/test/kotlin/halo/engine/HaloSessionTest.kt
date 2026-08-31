@@ -129,6 +129,57 @@ class HaloSessionTest {
     }
 
     @Test
+    fun sendsStopWhenCancelledBeforeScheduledStop() = runTest {
+        val result = async {
+            session.collect(
+                startCode = HaloProtocol.MICROPHONE_START,
+                startPayload = byteArrayOf(),
+                stopCode = HaloProtocol.MICROPHONE_STOP,
+                chunkCode = HaloProtocol.AUDIO_CHUNK,
+                finalCode = HaloProtocol.AUDIO_FINAL,
+                timeout = 5.seconds,
+                stopAfter = 500.milliseconds,
+                maxBytes = 1_000,
+            )
+        }
+
+        delay(10)
+        result.cancelAndJoin()
+
+        assertEquals(2, transport.dataChunks.size)
+        assertEquals(HaloProtocol.MICROPHONE_START, transport.dataChunks[0][0].toInt() and 0xff)
+        assertEquals(HaloProtocol.MICROPHONE_STOP, transport.dataChunks[1][0].toInt() and 0xff)
+    }
+
+    @Test
+    fun scheduledStopDoesNotDuplicateOnNormalCompletion() = runTest {
+        val result = async {
+            session.collect(
+                startCode = HaloProtocol.MICROPHONE_START,
+                startPayload = byteArrayOf(),
+                stopCode = HaloProtocol.MICROPHONE_STOP,
+                chunkCode = HaloProtocol.AUDIO_CHUNK,
+                finalCode = HaloProtocol.AUDIO_FINAL,
+                timeout = 5.seconds,
+                stopAfter = 200.milliseconds,
+            )
+        }
+
+        launch {
+            delay(50)
+            transport.emitMessage(HaloProtocol.AUDIO_CHUNK, byteArrayOf(1, 2, 3))
+            // The runtime only emits the final frame after it has stopped recording.
+            delay(300)
+            transport.emitMessage(HaloProtocol.AUDIO_FINAL, byteArrayOf())
+        }
+
+        assertContentEquals(byteArrayOf(1, 2, 3), result.await())
+        assertEquals(2, transport.dataChunks.size)
+        assertEquals(HaloProtocol.MICROPHONE_START, transport.dataChunks[0][0].toInt() and 0xff)
+        assertEquals(HaloProtocol.MICROPHONE_STOP, transport.dataChunks[1][0].toInt() and 0xff)
+    }
+
+    @Test
     fun noStopCodeWhenNotProvided() = runTest {
         val result = async {
             session.collect(

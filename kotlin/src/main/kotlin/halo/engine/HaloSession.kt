@@ -16,6 +16,7 @@ import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 
 /**
@@ -113,6 +114,7 @@ class HaloSession(
         val output = ByteArrayOutputStream()
         var written: Long = 0
         var stopJob: Job? = null
+        val stopSent = AtomicBoolean(false)
 
         val collector = async {
             messages
@@ -144,7 +146,7 @@ class HaloSession(
             if (stopCode != null && stopAfter != null) {
                 stopJob = launch {
                     delay(stopAfter)
-                    if (!finalSignal.isCompleted) {
+                    if (!finalSignal.isCompleted && stopSent.compareAndSet(false, true)) {
                         runCatching { send(stopCode, stopPayload) }
                     }
                 }
@@ -164,8 +166,10 @@ class HaloSession(
             throw cancelled
         } finally {
             stopJob?.cancel()
-            if (stopAfter == null) {
-                stopCode?.let { runCatching { send(it, stopPayload) } }
+            if (stopCode != null && !stopSent.get() && !finalSignal.isCompleted) {
+                if (stopSent.compareAndSet(false, true)) {
+                    runCatching { send(stopCode, stopPayload) }
+                }
             }
             disconnected?.cancel()
             collector.cancel()
