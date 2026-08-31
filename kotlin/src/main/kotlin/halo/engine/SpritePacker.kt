@@ -96,3 +96,91 @@ fun packIndexedPixels(indices: ByteArray, bpp: Int): ByteArray {
     }
     return out.toByteArray()
 }
+
+/**
+ * Quantize ARGB pixels into an indexed-color sprite using k-means clustering.
+ *
+ * Index 0 is reserved for transparent pixels (alpha < 128). Opaque pixels are
+ * mapped to palette entries 1..maxColors-1. This is platform-neutral — both
+ * [JvmSpritePacker] and [AndroidSpritePacker] call this after decoding the
+ * source image into an ARGB [IntArray].
+ */
+fun quantizeSprite(pixels: IntArray, width: Int, height: Int, bpp: Int): SpritePacker.Sprite {
+    require(bpp == 1 || bpp == 2 || bpp == 4) { "bpp must be 1, 2, or 4" }
+    val maxColors = 1 shl bpp
+
+    val colorCounts = pixels.asSequence()
+        .filter { (it ushr 24) >= 128 }
+        .groupBy { it and 0x00FFFFFF }
+        .map { (color, occurrences) -> color to occurrences.size }
+        .sortedByDescending { it.second }
+
+    val palette = ByteArray(maxColors * 3)
+    val indices = ByteArray(pixels.size)
+
+    if (colorCounts.isEmpty()) {
+        return SpritePacker.Sprite(width, height, bpp, maxColors, palette, indices)
+    }
+
+    val k = minOf(maxColors - 1, colorCounts.size)
+    val paletteColors = kMeansColors(colorCounts, k)
+
+    paletteColors.forEachIndexed { index, color ->
+        val offset = (index + 1) * 3
+        palette[offset] = (color ushr 16).toByte()
+        palette[offset + 1] = (color ushr 8).toByte()
+        palette[offset + 2] = color.toByte()
+    }
+
+    pixels.forEachIndexed { index, color ->
+        indices[index] = if ((color ushr 24) < 128) 0 else {
+            (nearestColor(color, paletteColors) + 1).toByte()
+        }
+    }
+
+    return SpritePacker.Sprite(width, height, bpp, maxColors, palette, indices)
+}
+
+/** Simple k-means on 24-bit RGB colors, weighted by pixel count. */
+private fun kMeansColors(colorCounts: List<Pair<Int, Int>>, k: Int): List<Int> {
+    if (colorCounts.size <= k) return colorCounts.map { it.first }
+
+    var centers = colorCounts.take(k).map { it.first }.toMutableList()
+    val clusters = Array<MutableList<Pair<Int, Int>>>(k) { mutableListOf() }
+
+    repeat(K_MEANS_ITERATIONS) {
+        clusters.forEach { it.clear() }
+        colorCounts.forEach { entry ->
+            val nearest = centers.indices.minBy { index -> colorDistance(centers[index], entry.first) }
+            clusters[nearest] += entry
+        }
+
+        val next = clusters.map { cluster ->
+            if (cluster.isEmpty()) 0
+            else {
+                val total = cluster.sumOf { it.second }
+                val r = cluster.sumOf { (it.first ushr 16 and 0xFF) * it.second } / total
+                val g = cluster.sumOf { (it.first ushr 8 and 0xFF) * it.second } / total
+                val b = cluster.sumOf { (it.first and 0xFF) * it.second } / total
+                (r shl 16) or (g shl 8) or b
+            }
+        }
+
+        if (next == centers) return centers
+        centers = next.toMutableList()
+    }
+
+    return centers
+}
+
+private fun colorDistance(a: Int, b: Int): Int {
+    val dr = (a ushr 16 and 0xFF) - (b ushr 16 and 0xFF)
+    val dg = (a ushr 8 and 0xFF) - (b ushr 8 and 0xFF)
+    val db = (a and 0xFF) - (b and 0xFF)
+    return dr * dr + dg * dg + db * db
+}
+
+private fun nearestColor(color: Int, palette: List<Int>): Int =
+    palette.indices.minBy { index -> colorDistance(palette[index], color) }
+
+private const val K_MEANS_ITERATIONS = 16
