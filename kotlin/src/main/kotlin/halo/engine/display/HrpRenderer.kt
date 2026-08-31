@@ -128,7 +128,7 @@ class HrpRenderer(
         require(payload.size == expectedSize) { "polygon expects $expectedSize bytes for $nPoints points, got ${payload.size}" }
         val points = mutableListOf<Pair<Int, Int>>()
         for (i in 0 until nPoints) {
-            points += (u16(payload, 1 + i * 4) to u16(payload, 1 + i * 4 + 2))
+            points += (u16(payload, 1 + i * 4) + 1 to u16(payload, 1 + i * 4 + 2) + 1)
         }
         buffer.polygon(points, rgb(payload, 1 + nPoints * 4))
     }
