@@ -21,16 +21,21 @@ class MockBleTransport(
     private val _messages = MutableSharedFlow<HaloMessage>(extraBufferCapacity = 64)
     override val messages: Flow<HaloMessage> = _messages.asSharedFlow()
 
+    private val _connectionEvents = MutableSharedFlow<Boolean>(extraBufferCapacity = 1)
+    override val connectionEvents: Flow<Boolean> = _connectionEvents.asSharedFlow()
+
     fun emitMessage(code: Int, payload: ByteArray) {
         _messages.tryEmit(HaloMessage(code, payload))
     }
 
     override suspend fun connect(name: String?) {
         connected = true
+        _connectionEvents.tryEmit(true)
     }
 
     override suspend fun disconnect() {
         connected = false
+        _connectionEvents.tryEmit(false)
     }
 
     override suspend fun sendLua(lua: String) {

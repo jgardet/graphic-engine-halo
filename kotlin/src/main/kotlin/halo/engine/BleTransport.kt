@@ -18,6 +18,8 @@ interface HaloBleTransport {
     suspend fun sendData(bytes: ByteArray)
     suspend fun sendAudioFrame(frame: ByteArray)
     val messages: Flow<HaloMessage>
+    /** Emits `true` when the transport becomes connected and `false` when it disconnects. */
+    val connectionEvents: Flow<Boolean>
     val supportsAudio: Boolean
     val maxLuaPayload: Int
     val maxDataPayload: Int

@@ -21,7 +21,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.first
@@ -51,12 +53,18 @@ class AndroidBleTransport(
             .filterIsInstance<HaloNotification.Message>()
             .map { HaloMessage(it.code, it.payload) }
 
+    private val _connectionEvents = MutableSharedFlow<Boolean>(extraBufferCapacity = 1)
+    override val connectionEvents: Flow<Boolean> = _connectionEvents.asSharedFlow()
+
     init {
         notificationScope.launch {
             for (bytes in channel.notifications) router.route(bytes)
         }
         notificationScope.launch {
-            for (connected in channel.connectionEvents) if (!connected) router.disconnected()
+            for (connected in channel.connectionEvents) {
+                _connectionEvents.tryEmit(connected)
+                if (!connected) router.disconnected()
+            }
         }
     }
 
