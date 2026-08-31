@@ -5,6 +5,7 @@ import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class CapabilityStateMachineTest {
@@ -209,5 +210,163 @@ class CapabilityStateMachineTest {
         assertTrue(machine.isMicStreaming())  // 5 more
         machine.tick()
         assertFalse(machine.isMicStreaming())  // done
+    }
+
+    // ------------------------------------------------------------------ display lifecycle
+
+    private fun validHrp(): ByteArray {
+        val hrp = ByteArray(10)
+        "HRP1".toByteArray(Charsets.US_ASCII).copyInto(hrp, 0)
+        hrp[4] = 0
+        hrp[5] = 0; hrp[6] = 1  // 1 command
+        // clear command: opcode=0x01, length=3, RGB=0,0,0
+        hrp[7] = 0x01
+        hrp[8] = 0; hrp[9] = 3
+        return hrp
+    }
+
+    @Test
+    fun displayStartsInactive() {
+        val machine = CapabilityStateMachine()
+        assertFalse(machine.isDisplayActive())
+        assertFalse(machine.isDisplayCleared())
+        assertEquals(null, machine.displayError())
+        assertEquals(0, machine.hrpFramesRendered())
+    }
+
+    @Test
+    fun hrpActivatesDisplay() {
+        val machine = CapabilityStateMachine()
+        machine.handleMessage(HaloProtocol.HRP, validHrp())
+        assertTrue(machine.isDisplayActive())
+        assertFalse(machine.isDisplayCleared())
+        assertEquals(null, machine.displayError())
+        assertEquals(1, machine.hrpFramesRendered())
+    }
+
+    @Test
+    fun multipleHrpFramesIncrementCounter() {
+        val machine = CapabilityStateMachine()
+        repeat(3) { machine.handleMessage(HaloProtocol.HRP, validHrp()) }
+        assertEquals(3, machine.hrpFramesRendered())
+        assertTrue(machine.isDisplayActive())
+    }
+
+    @Test
+    fun clearDisplayDeactivatesAndMarksCleared() {
+        val machine = CapabilityStateMachine()
+        machine.handleMessage(HaloProtocol.HRP, validHrp())
+        assertTrue(machine.isDisplayActive())
+        machine.handleMessage(0x10, ByteArray(0))  // CLEAR_DISPLAY
+        assertFalse(machine.isDisplayActive())
+        assertTrue(machine.isDisplayCleared())
+        assertEquals(null, machine.displayError())
+    }
+
+    @Test
+    fun plainTextActivatesDisplay() {
+        val machine = CapabilityStateMachine()
+        machine.handleMessage(0x11, "Hello\nWorld".toByteArray())  // PLAIN_TEXT
+        assertTrue(machine.isDisplayActive())
+        assertFalse(machine.isDisplayCleared())
+        assertEquals(2, machine.plainTextLines())
+    }
+
+    @Test
+    fun plainTextWithBlankLinesOnlyCountsNonEmpty() {
+        val machine = CapabilityStateMachine()
+        machine.handleMessage(0x11, "Hello\n\n\nWorld\n".toByteArray())
+        assertEquals(2, machine.plainTextLines())
+    }
+
+    @Test
+    fun invalidHrpHeaderEmitsError() {
+        val machine = CapabilityStateMachine()
+        val bad = ByteArray(7) { 0x58 }  // "XXXX" magic
+        machine.handleMessage(HaloProtocol.HRP, bad)
+        assertFalse(machine.isDisplayActive())
+        assertNotNull(machine.displayError())
+        val events = machine.drainEvents()
+        val errorMsg = events.filterIsInstance<DeviceEvent.Message>().firstOrNull { it.code == HaloProtocol.ERROR }
+        assertNotNull(errorMsg)
+        assertTrue(errorMsg.payload.toString(Charsets.UTF_8).contains("invalid HRP header"))
+    }
+
+    @Test
+    fun shortHrpPayloadEmitsError() {
+        val machine = CapabilityStateMachine()
+        machine.handleMessage(HaloProtocol.HRP, ByteArray(3))
+        assertNotNull(machine.displayError())
+        val events = machine.drainEvents()
+        val errorMsg = events.filterIsInstance<DeviceEvent.Message>().firstOrNull { it.code == HaloProtocol.ERROR }
+        assertNotNull(errorMsg)
+    }
+
+    @Test
+    fun clearAfterHrpResetsError() {
+        val machine = CapabilityStateMachine()
+        machine.handleMessage(HaloProtocol.HRP, ByteArray(3))  // invalid
+        assertNotNull(machine.displayError())
+        machine.handleMessage(0x10, ByteArray(0))  // CLEAR_DISPLAY
+        assertEquals(null, machine.displayError())
+        assertTrue(machine.isDisplayCleared())
+    }
+
+    @Test
+    fun newHrpAfterErrorRecovers() {
+        val machine = CapabilityStateMachine()
+        machine.handleMessage(HaloProtocol.HRP, ByteArray(3))  // invalid
+        assertNotNull(machine.displayError())
+        machine.handleMessage(HaloProtocol.HRP, validHrp())  // valid
+        assertEquals(null, machine.displayError())
+        assertTrue(machine.isDisplayActive())
+        assertEquals(1, machine.hrpFramesRendered())  // only valid frame counted
+    }
+
+    @Test
+    fun resetClearsDisplayState() {
+        val machine = CapabilityStateMachine()
+        machine.handleMessage(HaloProtocol.HRP, validHrp())
+        machine.handleMessage(HaloProtocol.SPEAKER_START, ByteArray(0))
+        assertTrue(machine.isDisplayActive())
+        assertTrue(machine.isSpeakerActive())
+
+        machine.reset()
+        assertFalse(machine.isDisplayActive())
+        assertFalse(machine.isDisplayCleared())
+        assertEquals(null, machine.displayError())
+        assertEquals(0, machine.hrpFramesRendered())
+        assertEquals(0, machine.plainTextLines())
+    }
+
+    @Test
+    fun displayLifecycleFullSequence() {
+        val machine = CapabilityStateMachine()
+        // 1. Start with HRP frame
+        machine.handleMessage(HaloProtocol.HRP, validHrp())
+        assertTrue(machine.isDisplayActive())
+        assertEquals(1, machine.hrpFramesRendered())
+
+        // 2. Clear display
+        machine.handleMessage(0x10, ByteArray(0))
+        assertTrue(machine.isDisplayCleared())
+        assertFalse(machine.isDisplayActive())
+
+        // 3. Plain text
+        machine.handleMessage(0x11, "Status".toByteArray())
+        assertTrue(machine.isDisplayActive())
+        assertFalse(machine.isDisplayCleared())
+        assertEquals(1, machine.plainTextLines())
+
+        // 4. Another HRP frame
+        machine.handleMessage(HaloProtocol.HRP, validHrp())
+        assertTrue(machine.isDisplayActive())
+        assertEquals(2, machine.hrpFramesRendered())
+
+        // 5. Clear and reset
+        machine.handleMessage(0x10, ByteArray(0))
+        machine.reset()
+        assertFalse(machine.isDisplayActive())
+        assertEquals(0, machine.hrpFramesRendered())
     }
 }

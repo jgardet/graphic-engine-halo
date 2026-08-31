@@ -96,6 +96,13 @@ class CapabilityStateMachine(
     // Speaker state
     private var speakerActive = false
 
+    // Display state
+    private var displayActive = false
+    private var displayCleared = false
+    private var displayError: String? = null
+    private var hrpFramesRendered = 0
+    private var plainTextLines = 0
+
     /** Boot sequence: emit STATUS with capability string. */
     fun boot() {
         emit(DeviceEvent.Message(HaloProtocol.STATUS, "HRP1;primitives,sprites,click,tap,mic,speaker,photo,battery".toByteArray()))
@@ -110,14 +117,15 @@ class CapabilityStateMachine(
     fun handleMessage(code: Int, payload: ByteArray): Boolean {
         when (code) {
             HaloProtocol.HRP -> {
-                // HRP is handled by HrpRenderer, not here.
+                handleHrp(payload)
                 return true
             }
             0x10 -> { // CLEAR_DISPLAY
-                // Handled by display layer
+                clearDisplay()
                 return true
             }
             0x11 -> { // PLAIN_TEXT
+                handlePlainText(payload)
                 return true
             }
             HaloProtocol.MICROPHONE_START -> {
@@ -230,6 +238,59 @@ class CapabilityStateMachine(
         speakerActive = false
     }
 
+    // ------------------------------------------------------------------ display
+
+    /**
+     * Handle an HRP display frame.
+     *
+     * Mirrors `he_runtime.lua` line 310-315: the HRP payload is parsed
+     * and executed. On parse/render failure, an ERROR event is emitted
+     * with the error message (matching the Lua `pcall` pattern).
+     */
+    private fun handleHrp(payload: ByteArray) {
+        // The actual HRP rendering is done by HrpRenderer on the host side.
+        // The device-side state machine just tracks lifecycle and emits
+        // errors if the payload is invalid (matching he_runtime.lua pcall).
+        if (payload.size < 7) {
+            displayError = "invalid HRP header"
+            emit(DeviceEvent.Message(HaloProtocol.ERROR, displayError!!.toByteArray()))
+            return
+        }
+        val magic = String(payload, 0, 4, Charsets.US_ASCII)
+        if (magic != "HRP1" || payload[4].toInt() != 0) {
+            displayError = "invalid HRP header"
+            emit(DeviceEvent.Message(HaloProtocol.ERROR, displayError!!.toByteArray()))
+            return
+        }
+        displayActive = true
+        displayCleared = false
+        displayError = null
+        hrpFramesRendered++
+    }
+
+    /**
+     * Clear the display (CLEAR_DISPLAY = 0x10).
+     * Mirrors `he_runtime.lua` line 316-317: `frame.display.clear()`.
+     */
+    private fun clearDisplay() {
+        displayCleared = true
+        displayActive = false
+        displayError = null
+    }
+
+    /**
+     * Handle plain text display (PLAIN_TEXT = 0x11).
+     * Mirrors `he_runtime.lua` line 318-319: `pcall(draw_plain_text, payload)`.
+     * Draws each non-empty line of text on the display.
+     */
+    private fun handlePlainText(payload: ByteArray) {
+        displayActive = true
+        displayCleared = false
+        displayError = null
+        val text = String(payload, Charsets.UTF_8)
+        plainTextLines = text.split('\n').count { it.isNotBlank() }
+    }
+
     // ------------------------------------------------------------------ battery
 
     private fun sendBattery() {
@@ -259,6 +320,11 @@ class CapabilityStateMachine(
     fun isMicStreaming(): Boolean = micStreaming
     fun isPhotoPending(): Boolean = photoPending
     fun isSpeakerActive(): Boolean = speakerActive
+    fun isDisplayActive(): Boolean = displayActive
+    fun isDisplayCleared(): Boolean = displayCleared
+    fun displayError(): String? = displayError
+    fun hrpFramesRendered(): Int = hrpFramesRendered
+    fun plainTextLines(): Int = plainTextLines
 
     /** Reset all state (e.g. on disconnect). */
     fun reset() {
@@ -267,6 +333,11 @@ class CapabilityStateMachine(
         photoPending = false
         photoOffset = 0
         speakerActive = false
+        displayActive = false
+        displayCleared = false
+        displayError = null
+        hrpFramesRendered = 0
+        plainTextLines = 0
     }
 
     /** Drain and return all queued events in emission order. */
