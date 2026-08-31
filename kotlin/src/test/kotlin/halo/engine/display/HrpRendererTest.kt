@@ -87,7 +87,7 @@ class HrpRendererTest {
     @Test
     fun rejectsInvalidMagic() {
         val bad = byteArrayOf(0x58, 0x58, 0x58, 0x58, 0, 0, 0)
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<HrpFailure> {
             HrpRenderer().render(bad)
         }
     }
@@ -99,7 +99,7 @@ class HrpRendererTest {
             'H'.code.toByte(), 'R'.code.toByte(), 'P'.code.toByte(), '1'.code.toByte(),
             0, 0, 1,
         )
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<HrpFailure> {
             HrpRenderer().render(truncated)
         }
     }
@@ -108,7 +108,7 @@ class HrpRendererTest {
     fun rejectsTrailingBytes() {
         val hrp = HrpBuilder().clear(0).build()
         val withTrailing = hrp + byteArrayOf(0xFF.toByte())
-        assertFailsWith<IllegalArgumentException> {
+        assertFailsWith<HrpFailure> {
             HrpRenderer().render(withTrailing)
         }
     }
