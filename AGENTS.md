@@ -1,8 +1,10 @@
-# Graphic Engine Halo — Agent Guide
+# Halo Engine — Agent Guide
 
 ## What this project is
 
-A Kotlin-first / Python-reference graphics engine for the Brilliant Labs Halo smart glasses. It turns a high-level, JSON "Halo Scene Description" (HSD) into Lua or binary render packets and sends them to the glasses over BLE.
+The host-device runtime SDK for the Brilliant Labs Halo smart glasses. It owns the firmware-facing surface: HSD scene compilation, HRP binary render protocol, BLE transport, the device-side Lua runtime (`he_runtime.lua`), and streaming primitives (`HaloMessage`, `HaloSession`) for microphone, speaker, camera, battery, and input events.
+
+The engine is deliberately unaware of higher-level agent concerns: generic sense contracts (`agent-senses/core`), agent tools and prompts (`dsh-android`), on-device models (Gemma), product templates, and chat/transcript semantics all live outside this repository.
 
 ## How to work with it
 

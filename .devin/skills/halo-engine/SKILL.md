@@ -1,15 +1,15 @@
 ---
 name: halo-engine
-description: Compile and preview a Halo smart-glasses scene from a JSON scene description.
+description: Compile and preview a Halo smart-glasses scene from a JSON scene description using the Halo Engine SDK (HSD/HRP/Lua runtime).
 argument-hint: "[render request]"
 triggers:
   - user
   - model
 ---
 
-# Halo Graphic Engine Skill
+# Halo Engine Skill
 
-Use this skill when the user wants to generate or preview visuals for the Brilliant Labs Halo smart glasses, or when asked to create a HUD / UI for a small circular display.
+Use this skill when the user wants to generate or preview visuals for the Brilliant Labs Halo smart glasses, or when asked to create a HUD / UI for a small circular display. The Halo Engine is the host-device runtime SDK that owns HSD compilation, HRP binary protocol, BLE transport, and the device-side Lua runtime.
 
 ## What it does
 

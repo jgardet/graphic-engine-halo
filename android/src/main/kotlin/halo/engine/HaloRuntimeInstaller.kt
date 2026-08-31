@@ -14,6 +14,17 @@ class HaloRuntimeInstaller(
     private val transport: AndroidBleTransport,
     private val runtimeFileName: String = "halo_engine.lua",
 ) {
+    /**
+     * Installs the runtime from a [HaloRuntimeSource] and starts it.
+     *
+     * Convenience overload that loads the source via [source.load()]
+     * and delegates to [installAndStart]. Use this when you have a
+     * structured runtime source (e.g. [halo.engine.android.AssetHaloRuntimeSource])
+     * rather than a raw string.
+     */
+    suspend fun installAndStart(source: HaloRuntimeSource, timeoutMs: Long = 10_000): String =
+        installAndStart(source.load(), timeoutMs)
+
     suspend fun installAndStart(source: String, timeoutMs: Long = 10_000): String = coroutineScope {
         transport.sendControl(HaloProtocol.LUA_CTRL_INTERRUPT.toByte())
         delay(200)

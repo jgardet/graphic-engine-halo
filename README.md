@@ -1,6 +1,6 @@
-# Halo Graphic Engine
+# Halo Engine
 
-**Hardware-bounded, agent-driven interfaces for Brilliant Labs Halo smart glasses.**
+**Host-device runtime SDK for Brilliant Labs Halo smart glasses — graphics, streaming capabilities, and BLE transport.**
 
 Halo is an open-source pair of smart glasses with an integrated near-eye color display, camera, microphones, bone-conduction speakers, motion sensors, a low-power processor, and Bluetooth LE connectivity. Its 0.2-inch OLEDoS display is mounted in the frame and optically presented in the wearer’s peripheral view.
 
@@ -154,7 +154,30 @@ android/                Android library, BluetoothGatt transport, and audio paci
 lua/                    Device-side HRP runtime and non-visual capability dispatcher
 ```
 
-## Scope and limitations
+## Scope and boundary
+
+### Owns
+
+The Halo Engine owns the firmware-facing surface for Brilliant Labs Halo:
+
+- **Halo Scene Description (HSD)** — JSON scene graph, validation, coordinate conversion, colors, fonts, sprite packing.
+- **Halo Render Protocol (HRP)** — compact binary display protocol carried inside official BLE data-message framing.
+- **Lua runtime** — `lua/he_runtime.lua` device-side dispatcher for display, microphone, speaker, camera, battery, and input events.
+- **BLE transport** — `BluetoothGattChannel`, `AndroidBleTransport`, message framing, MTU negotiation, receiver-paced audio writes.
+- **Streaming primitives** — `HaloMessage`, `HaloSession` for request/response and chunk-based streaming with cancellation and bounded collection.
+- **Python and Kotlin vectors** — equivalent HSD/HRP compilation, emulator validation, and MCP integration.
+
+### Does not own
+
+The engine is deliberately unaware of higher-level agent and application concerns:
+
+- **Generic sense contracts** — `SensesDevice`, `SenseEndpoint`, `SenseCapability`, and `SenseProfile` live in `agent-senses/core`.
+- **Agent tools and prompts** — `sense_*` tool definitions, dsh plugin adapters, and system prompts live in `dsh-android`.
+- **On-device models** — Gemma inference, vision prepass, and TTS model loading live in `dsh-android`.
+- **Product templates** — status, key/value, chart, and navigation HSD templates live in `dsh-android`.
+- **Transcripts and chat semantics** — conversation history, tool-call parsing, and JSON-RPC transport live in `dsh-android`.
+
+### Limitations
 
 The current implementation targets Halo’s existing primitives: text, pixels, lines, rectangles, circles, polygons, indexed bitmaps, palette handling, and immediate drawing. It does not provide alpha blending, rotation, GPU layers, arbitrary polygon filling, or double buffering on stock firmware.
 
