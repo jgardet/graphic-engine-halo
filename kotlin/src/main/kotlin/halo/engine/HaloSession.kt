@@ -13,6 +13,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.yield
 import java.io.ByteArrayOutputStream
 import kotlin.time.Duration
 
@@ -98,6 +99,7 @@ class HaloSession(
             messages
                 .filter { it.code == chunkCode || it.code == finalCode }
                 .collect { message ->
+                    yield()
                     currentCoroutineContext().ensureActive()
                     when (message.code) {
                         chunkCode -> {
