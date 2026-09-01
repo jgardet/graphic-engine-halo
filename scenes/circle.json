@@ -1,0 +1,13 @@
+{
+  "version": "1.0",
+  "device": "halo",
+  "mode": "repl",
+  "scene": {
+    "width": 256,
+    "height": 256,
+    "bg": "#000000",
+    "children": [
+      { "type": "circle", "cx": 128, "cy": 128, "r": 80, "color": "#00FF00", "filled": true }
+    ]
+  }
+}

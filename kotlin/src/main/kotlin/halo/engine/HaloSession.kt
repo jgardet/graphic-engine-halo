@@ -67,6 +67,7 @@ class HaloSession(
             async { it.filter { connected -> !connected }.first() }
         }
         try {
+            yield()
             send(requestCode, requestPayload)
             withTimeout(timeout) {
                 if (disconnected == null) {
@@ -142,6 +143,7 @@ class HaloSession(
         }
 
         try {
+            yield()
             send(startCode, startPayload)
             if (stopCode != null && stopAfter != null) {
                 stopJob = launch {
