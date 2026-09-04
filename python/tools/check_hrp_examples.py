@@ -11,7 +11,7 @@ from halo_emulator import HaloEmulator
 from halo_engine.hrp_compiler import compile_scene_hrp
 
 ROOT = Path(__file__).resolve().parents[2]
-OUT = Path("C:/tmp/halo-example-check")
+OUT = ROOT / "tmp" / "halo-example-check"
 os.chdir(ROOT)
 
 for scene_file in sorted((ROOT / "scenes").glob("*.json")):

@@ -21,6 +21,20 @@ def test_hrp_matches_big_endian_layout():
     assert commands == [(0x03, b"\x00\x01\x00\x02\x12\x34\x56")]
 
 
+def test_hrp_sprite_release_dirty_region_features_wire_format():
+    payload = (
+        HrpBuilder()
+        .sprite_release(1)
+        .dirty_region(4, 5, 6, 7)
+        .features(0xAABBCCDD)
+        .build()
+    )
+    commands = decode_frame(payload)
+    assert commands[0] == (0x0C, b"\x00\x01")
+    assert commands[1] == (0x0D, b"\x00\x04\x00\x05\x00\x06\x00\x07")
+    assert commands[2] == (0x0F, b"\xaa\xbb\xcc\xdd")
+
+
 def test_polygon_limit():
     with pytest.raises(ValueError, match="64"):
         HrpBuilder().polygon([(0, 0)] * 65, "#fff")

@@ -2,6 +2,7 @@ package halo.engine
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
@@ -13,6 +14,7 @@ import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.yield
 import java.io.ByteArrayOutputStream
@@ -67,6 +69,7 @@ class HaloSession(
             async { it.filter { connected -> !connected }.first() }
         }
         try {
+            yield()
             send(requestCode, requestPayload)
             withTimeout(timeout) {
                 if (disconnected == null) {
@@ -142,12 +145,13 @@ class HaloSession(
         }
 
         try {
+            yield()
             send(startCode, startPayload)
             if (stopCode != null && stopAfter != null) {
                 stopJob = launch {
                     delay(stopAfter)
                     if (!finalSignal.isCompleted && stopSent.compareAndSet(false, true)) {
-                        runCatching { send(stopCode, stopPayload) }
+                        withContext(NonCancellable) { runCatching { send(stopCode, stopPayload) } }
                     }
                 }
             }
@@ -168,7 +172,7 @@ class HaloSession(
             stopJob?.cancel()
             if (stopCode != null && !stopSent.get() && !finalSignal.isCompleted) {
                 if (stopSent.compareAndSet(false, true)) {
-                    runCatching { send(stopCode, stopPayload) }
+                    withContext(NonCancellable) { runCatching { send(stopCode, stopPayload) } }
                 }
             }
             disconnected?.cancel()

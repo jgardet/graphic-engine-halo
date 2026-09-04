@@ -1,4 +1,4 @@
-"""MCP server for the Halo Graphic Engine.
+"""MCP server for the Halo Engine.
 
 Exposes agent tools to compile HSD scenes to Lua, preview them in the emulator,
 and pack sprites.
@@ -19,9 +19,39 @@ from .hrp_compiler import compile_scene_hrp
 from .preview import preview_lua
 from .sprite import pack_sprite, sprite_to_lua_args
 
+ALLOWED_ASSET_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _validate_asset_source(src: str) -> None:
+    """Reject MCP asset paths outside this checkout; data URIs are in-memory."""
+    if src.startswith("data:"):
+        return
+    path = Path(src).resolve()
+    try:
+        path.relative_to(ALLOWED_ASSET_ROOT)
+    except ValueError as exc:
+        raise ValueError("asset paths must stay inside the Halo Engine checkout") from exc
+    if not path.is_file():
+        raise FileNotFoundError(f"asset source not found: {src}")
+
+
+def _validate_scene_assets(value: object) -> None:
+    if isinstance(value, dict):
+        if value.get("type") == "sprite":
+            src = value.get("src")
+            if not isinstance(src, str):
+                raise ValueError("sprite src must be a string")
+            _validate_asset_source(src)
+        for child in value.values():
+            _validate_scene_assets(child)
+    elif isinstance(value, list):
+        for child in value:
+            _validate_scene_assets(child)
+
+
 server = MCPServer(
     name="halo-engine",
-    title="Halo Graphic Engine",
+    title="Halo Engine",
     description="Compile and preview visuals for Brilliant Labs Halo smart glasses.",
     version="0.1.0",
 )
@@ -38,13 +68,16 @@ def compile_hsd(hsd_json: str) -> str:
         The Lua code that can be sent to a Halo device.
     """
     scene = json.loads(hsd_json)
+    _validate_scene_assets(scene)
     return compile_scene(scene)
 
 
 @server.tool()
 def compile_hrp_hsd(hsd_json: str) -> str:
     """Compile HSD JSON to a base64-encoded hardware-valid HRP payload."""
-    payload = compile_scene_hrp(json.loads(hsd_json))
+    scene = json.loads(hsd_json)
+    _validate_scene_assets(scene)
+    payload = compile_scene_hrp(scene)
     return base64.b64encode(payload).decode("ascii")
 
 
@@ -59,6 +92,7 @@ def preview_hsd(hsd_json: str) -> str:
         A base64-encoded PNG of the rendered framebuffer.
     """
     scene = json.loads(hsd_json)
+    _validate_scene_assets(scene)
     lua = compile_scene(scene)
     img, _ = preview_lua(lua)
     if img is None:
@@ -84,6 +118,7 @@ def pack_sprite_tool(src: str, width: int | None = None, height: int | None = No
     Returns:
         A JSON object with the packed sprite metadata and a base64 data URI.
     """
+    _validate_asset_source(src)
     sprite = pack_sprite(src, width, height, bpp)
     packed = sprite.packed()
     return json.dumps(

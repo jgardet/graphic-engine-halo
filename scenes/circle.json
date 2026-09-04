@@ -7,7 +7,7 @@
     "height": 256,
     "bg": "#000000",
     "children": [
-      { "type": "sprite", "src": "docs/examples/icon_test.png", "x": 96, "y": 96, "w": 64, "h": 64, "bpp": 4 }
+      { "type": "circle", "cx": 128, "cy": 128, "r": 80, "color": "#00FF00", "filled": true }
     ]
   }
 }

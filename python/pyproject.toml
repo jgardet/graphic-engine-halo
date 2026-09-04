@@ -1,13 +1,13 @@
 [project]
 name = "halo-engine"
 version = "0.1.0"
-description = "Halo Graphic Engine — compile and preview visuals for Brilliant Labs Halo smart glasses"
+description = "Halo Engine — host-device runtime SDK for Brilliant Labs Halo smart glasses (HSD/HRP/Lua, BLE transport, streaming capabilities)"
+license = {text = "MIT"}
 requires-python = ">=3.10"
 dependencies = [
     "halo-emulator>=2.0.1",
     "Pillow>=10.0",
     "numpy>=1.26",
-    "lz4>=4.0",
     "mcp>=2.0",
 ]
 

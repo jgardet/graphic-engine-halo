@@ -16,5 +16,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "graphic-engine-halo"
+rootProject.name = "halo-engine"
 include("kotlin", "android")

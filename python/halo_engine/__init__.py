@@ -1,4 +1,4 @@
-"""Halo Graphic Engine — Python reference implementation."""
+"""Halo Engine — Python reference implementation."""
 
 from .compiler import compile_scene
 from .hrp_compiler import compile_scene_hrp

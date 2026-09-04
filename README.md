@@ -1,6 +1,6 @@
-# Halo Graphic Engine
+# Halo Engine
 
-**Hardware-bounded, agent-driven interfaces for Brilliant Labs Halo smart glasses.**
+**Host-device runtime SDK for Brilliant Labs Halo smart glasses — graphics, streaming capabilities, and BLE transport.**
 
 Halo is an open-source pair of smart glasses with an integrated near-eye color display, camera, microphones, bone-conduction speakers, motion sensors, a low-power processor, and Bluetooth LE connectivity. Its 0.2-inch OLEDoS display is mounted in the frame and optically presented in the wearer’s peripheral view.
 
@@ -58,7 +58,7 @@ These abstractions live in `kotlin/` and `android/` and are consumed by the `dsh
 ## Why Python, Kotlin, and Lua?
 
 - **Python** is the reference implementation for rapid protocol work, image quantization, agent/MCP integration, and emulator validation.
-- **Kotlin** is the intended production host for an Android phone and mirrors the compiler and HRP byte layout.
+- **Kotlin** is the intended production host for an Android phone and mirrors the compiler and HRP byte layout. Use the checked-in Gradle wrapper for reproducible builds.
 - **Lua** runs on the glasses and is kept small because it executes inside Halo’s embedded runtime.
 
 Python and Kotlin are expected to produce equivalent HSD/HRP behavior. Python provides reference vectors and hardware-free tests; Kotlin provides the Android integration path.
@@ -96,15 +96,15 @@ Run tests:
 
 ```bash
 python -m pytest python/tests -q
-gradle :kotlin:test
-gradle :kotlin:build
+./gradlew :kotlin:test
+./gradlew :kotlin:build
 ```
 
 The Android library target requires an Android SDK. Once configured, run:
 
 ```bash
-gradle :android:assembleDebug
-gradle :android:connectedDebugAndroidTest
+./gradlew :android:assembleDebug
+./gradlew :android:connectedDebugAndroidTest
 ```
 
 ## Examples
@@ -118,7 +118,7 @@ Source-controlled scene descriptions are in [`scenes/`](scenes/):
 | [`results_table.json`](scenes/results_table.json) | Excel-like grid and results | Lua or HRP |
 | [`bar_chart.json`](scenes/bar_chart.json) | Axes, labels, and bars | Lua or HRP |
 | [`btc_chart.json`](scenes/btc_chart.json) | Candlesticks and price overlay | Lua or HRP |
-| [`icon_test.json`](scenes/icon_test.json) | Indexed sprite rendering | HRP |
+| [`icon_test.json`](scenes/icon_test.json) | Indexed sprite rendering | Lua or HRP via `hrp_compile` |
 | [`venus_image.json`](scenes/venus_image.json) | 16-color indexed image | HRP |
 
 ### Rendered previews
@@ -154,7 +154,30 @@ android/                Android library, BluetoothGatt transport, and audio paci
 lua/                    Device-side HRP runtime and non-visual capability dispatcher
 ```
 
-## Scope and limitations
+## Scope and boundary
+
+### Owns
+
+The Halo Engine owns the firmware-facing surface for Brilliant Labs Halo:
+
+- **Halo Scene Description (HSD)** — JSON scene graph, validation, coordinate conversion, colors, fonts, sprite packing.
+- **Halo Render Protocol (HRP)** — compact binary display protocol carried inside official BLE data-message framing.
+- **Lua runtime** — `lua/he_runtime.lua` device-side dispatcher for display, microphone, speaker, camera, battery, and input events.
+- **BLE transport** — `BluetoothGattChannel`, `AndroidBleTransport`, message framing, MTU negotiation, receiver-paced audio writes.
+- **Streaming primitives** — `HaloMessage`, `HaloSession` for request/response and chunk-based streaming with cancellation and bounded collection.
+- **Python and Kotlin vectors** — equivalent HSD/HRP compilation, emulator validation, and MCP integration.
+
+### Does not own
+
+The engine is deliberately unaware of higher-level agent and application concerns:
+
+- **Generic sense contracts** — `SenseEndpoint`, `SenseCapability`, and `SenseProfile` live in `agent-senses/core`.
+- **Agent tools and prompts** — `sense_*` tool definitions, dsh plugin adapters, and system prompts live in `dsh-android`.
+- **On-device models** — Gemma inference, vision prepass, and TTS model loading live in `dsh-android`.
+- **Product templates** — status, key/value, chart, and navigation HSD templates live in `dsh-android`.
+- **Transcripts and chat semantics** — conversation history, tool-call parsing, and JSON-RPC transport live in `dsh-android`.
+
+### Limitations
 
 The current implementation targets Halo’s existing primitives: text, pixels, lines, rectangles, circles, polygons, indexed bitmaps, palette handling, and immediate drawing. It does not provide alpha blending, rotation, GPU layers, arbitrary polygon filling, or double buffering on stock firmware.
 
