@@ -20,7 +20,7 @@ import halo.engine.validateHrpMessage
  * Authoritative sources:
  * - `lua/he_runtime.lua` lines 127-209 (HRP parsing)
  * - `docs/HRP.md` (opcode reference)
- * - `vendor/brilliant_sdk/python/packages/halo_emulator/src/halo_emulator/display.py`
+ * - the installed `halo-emulator` package's display implementation
  */
 class HrpRenderer(
     private val buffer: DisplayBuffer = DisplayBuffer(),

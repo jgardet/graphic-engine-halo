@@ -8,7 +8,7 @@ The engine is deliberately unaware of higher-level agent concerns: generic sense
 
 ## How to work with it
 
-1. **Read the instruction set** at `docs/INSTRUCTION_SET.md` before generating HSD.
+1. **Read the instruction set** at `docs/HSD_INSTRUCTION_SET.md` before generating HSD.
 2. **Use the Python reference** for fast iteration and emulator tests.
 3. **Use the Kotlin engine** as the production host runtime.
 4. **Use the Devin skill** (`/halo-engine`) to get the prompt template for rendering a scene.
@@ -25,12 +25,12 @@ python -m halo_engine.mcp_server        # stdio MCP server
 cd ..
 
 # Kotlin
-gradle :kotlin:build
-gradle :kotlin:run --args="compile scenes/running_hud.json -o /tmp/hud.lua"
+.\gradlew.bat :kotlin:build
+.\gradlew.bat :kotlin:run --args="compile scenes/running_hud.json -o /tmp/hud.lua"
 
 # Tests
 python -m pytest -v                     # Python
-gradle :kotlin:test                     # Kotlin
+.\gradlew.bat :kotlin:test              # Kotlin
 ```
 
 ## Project rules
@@ -38,9 +38,10 @@ gradle :kotlin:test                     # Kotlin
 - HSD is **0-indexed** top-left; the engine adds 1 before emitting Lua.
 - Colors are `#RRGGBB` hex strings, `0xRRGGBB` integers, or a named color.
 - Fonts: `0` = Dogica, `1` = DogicaBold; `size` must be a multiple of 8.
-- For `runtime` mode, the device-side `lua/he_runtime.lua` must be uploaded first.
+- The primary compiler currently supports `repl` mode; use `halo_engine.hrp_compile` for hardware-bounded HRP payloads.
+- For the optimized HRP runtime, the device-side `lua/he_runtime.lua` must be uploaded first.
 - Always verify generated Lua in the `halo_emulator` before shipping to hardware.
-- The `brilliant_sdk/` and `halo-firmware/` directories are reference vendored repos.
+- Optional Brilliant SDK and firmware references may be supplied under an ignored local `vendor/` directory; they are not part of this checkout.
 - Non-visual streaming (mic, photo, battery, etc.) uses the engine-level
   `HaloMessage` and `HaloSession` abstractions in `halo.engine`. Transports
   expose a `messages: Flow<HaloMessage>` stream; `HaloSession.collect()`

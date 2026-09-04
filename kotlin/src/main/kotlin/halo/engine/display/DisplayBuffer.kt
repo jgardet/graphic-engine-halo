@@ -11,7 +11,7 @@ package halo.engine.display
  * Dogica GFX fonts, 1-based coordinates low-clamped to 1.
  *
  * Authoritative sources:
- * - `vendor/brilliant_sdk/python/packages/halo_emulator/src/halo_emulator/display.py`
+ * - the installed `halo-emulator` package's display implementation
  * - `lua/he_runtime.lua` (device-side dispatcher)
  */
 class DisplayBuffer {

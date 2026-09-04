@@ -12,8 +12,8 @@ The profile and its rationale are defined in [`HARDWARE_LIMITS.md`](HARDWARE_LIM
 - Python: Python 3.13
 - Kotlin/JVM: Gradle Kotlin/JVM project
 - Emulator: official `halo-emulator` package, version 2.0.1
-- SDK reference: vendored Brilliant SDK under `vendor/brilliant_sdk`
-- Firmware reference: vendored Halo firmware under `vendor/halo-firmware`
+- SDK reference: the published `halo-emulator` package; optional local SDK/firmware references are not committed
+- Firmware reference: the published hardware documentation and the conservative profile in `HARDWARE_LIMITS.md`
 
 ## Active safety profile
 
@@ -52,7 +52,7 @@ The scene examples were enumerated from `scenes/*.json`:
 Inline Lua mode is intended only for small REPL commands. Each scene was compiled with:
 
 ```powershell
-python -m halo_engine.compile scenes/<name>.json --out C:/tmp/halo-example-check/<name>.lua
+python -m halo_engine.compile scenes/<name>.json --out tmp/halo-example-check/<name>.lua
 ```
 
 The compiler validates the UTF-8 byte length of the complete Lua source against `max_lua_source_bytes`. It rejects oversized output before transmission.
@@ -62,14 +62,14 @@ The compiler validates the UTF-8 byte length of the complete Lua source against 
 Each scene was compiled to HRP v1 with:
 
 ```powershell
-python -m halo_engine.hrp_compile scenes/<name>.json --out C:/tmp/halo-example-check/<name>.hrp
+python -m halo_engine.hrp_compile scenes/<name>.json --out tmp/halo-example-check/<name>.hrp
 ```
 
 HRP output uses the official Brilliant data-message payload model and is checked against the conservative HRP and official uint16 message limits.
 
 ### 4. Execute HRP in the emulator
 
-All scenes were executed through the project HRP runtime using the official `data.min.lua` reassembly library:
+All scenes were executed through the project HRP runtime using the installed `halo-emulator` package and the repository's local framing model. No SDK or firmware repository is required:
 
 ```powershell
 cd python
@@ -79,13 +79,12 @@ python tools/check_hrp_examples.py
 The checker:
 
 1. Copies `lua/he_runtime.lua` into an isolated emulator sandbox.
-2. Copies the official `data.min.lua` library into that sandbox.
-3. Starts the Lua runtime.
-4. Compiles each scene to HRP.
-5. Wraps the HRP payload using the official message-code and uint16-length framing.
-6. Injects the message into `HaloEmulator`.
-7. Waits for the runtime to process it.
-8. Reports runtime errors or truncation errors.
+2. Starts the installed Halo emulator package with that runtime.
+3. Compiles each scene to HRP.
+4. Wraps the HRP payload using the documented message-code and uint16-length framing.
+5. Injects the message into `HaloEmulator`.
+6. Waits for the runtime to process it.
+7. Reports runtime errors or truncation errors.
 
 The runtime test suite can also be run with:
 
@@ -97,7 +96,7 @@ python -m pytest -q
 The Kotlin verification is:
 
 ```powershell
-gradle :kotlin:build
+.\gradlew.bat :kotlin:build
 ```
 
 ## Findings
@@ -122,7 +121,7 @@ The 64×64 icon is also rejected in inline mode because its escaped Lua represen
 
 ### Runtime findings
 
-All seven scenes produced `EMU_PASS` when delivered to `he_runtime.lua` through the official `data.min.lua` reassembly path. This includes the Venus scene and verifies the HRP parser's handling of:
+All seven scenes produced `EMU_PASS` when delivered to `he_runtime.lua` through the local documented framing path. This includes the Venus scene and verifies the HRP parser's handling of:
 
 - Large indexed sprite resources
 - Sprite placement

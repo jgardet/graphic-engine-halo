@@ -18,7 +18,7 @@ The Halo is a 256×256 circular RGB OLED smart glass. This skill compiles a JSON
 ## How to respond
 
 1. Ask the user for the content they want displayed (or infer it from the request).
-2. Write a HSD JSON file in `scenes/<name>.json` following the schema in `docs/INSTRUCTION_SET.md`.
+2. Write a HSD JSON file in `scenes/<name>.json` following the schema in `docs/HSD_INSTRUCTION_SET.md`.
 3. Compile it with `python -m halo_engine.compile <scene>.json -o /tmp/<name>.lua`.
 4. Preview it with `python -m halo_engine.preview /tmp/<name>.lua -o /tmp/<name>.png`.
 5. Show the user the PNG and the generated Lua (or an excerpt).
@@ -59,4 +59,4 @@ The Halo is a 256×256 circular RGB OLED smart glass. This skill compiles a JSON
 
 ## Capabilities and limitations
 
-See `docs/CAPABILITIES.md` and `docs/FIRMWARE_NOTES.md` for the full display API and what can be boosted with or without firmware changes.
+See `docs/HSD_INSTRUCTION_SET.md` and `docs/HARDWARE_LIMITS.md` for the display schema and conservative hardware budgets.

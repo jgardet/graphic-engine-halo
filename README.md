@@ -58,7 +58,7 @@ These abstractions live in `kotlin/` and `android/` and are consumed by the `dsh
 ## Why Python, Kotlin, and Lua?
 
 - **Python** is the reference implementation for rapid protocol work, image quantization, agent/MCP integration, and emulator validation.
-- **Kotlin** is the intended production host for an Android phone and mirrors the compiler and HRP byte layout.
+- **Kotlin** is the intended production host for an Android phone and mirrors the compiler and HRP byte layout. Use the checked-in Gradle wrapper for reproducible builds.
 - **Lua** runs on the glasses and is kept small because it executes inside Halo’s embedded runtime.
 
 Python and Kotlin are expected to produce equivalent HSD/HRP behavior. Python provides reference vectors and hardware-free tests; Kotlin provides the Android integration path.
@@ -96,15 +96,15 @@ Run tests:
 
 ```bash
 python -m pytest python/tests -q
-gradle :kotlin:test
-gradle :kotlin:build
+./gradlew :kotlin:test
+./gradlew :kotlin:build
 ```
 
 The Android library target requires an Android SDK. Once configured, run:
 
 ```bash
-gradle :android:assembleDebug
-gradle :android:connectedDebugAndroidTest
+./gradlew :android:assembleDebug
+./gradlew :android:connectedDebugAndroidTest
 ```
 
 ## Examples
@@ -118,7 +118,7 @@ Source-controlled scene descriptions are in [`scenes/`](scenes/):
 | [`results_table.json`](scenes/results_table.json) | Excel-like grid and results | Lua or HRP |
 | [`bar_chart.json`](scenes/bar_chart.json) | Axes, labels, and bars | Lua or HRP |
 | [`btc_chart.json`](scenes/btc_chart.json) | Candlesticks and price overlay | Lua or HRP |
-| [`icon_test.json`](scenes/icon_test.json) | Indexed sprite rendering | HRP |
+| [`icon_test.json`](scenes/icon_test.json) | Indexed sprite rendering | Lua or HRP via `hrp_compile` |
 | [`venus_image.json`](scenes/venus_image.json) | 16-color indexed image | HRP |
 
 ### Rendered previews
@@ -171,7 +171,7 @@ The Halo Engine owns the firmware-facing surface for Brilliant Labs Halo:
 
 The engine is deliberately unaware of higher-level agent and application concerns:
 
-- **Generic sense contracts** — `SensesDevice`, `SenseEndpoint`, `SenseCapability`, and `SenseProfile` live in `agent-senses/core`.
+- **Generic sense contracts** — `SenseEndpoint`, `SenseCapability`, and `SenseProfile` live in `agent-senses/core`.
 - **Agent tools and prompts** — `sense_*` tool definitions, dsh plugin adapters, and system prompts live in `dsh-android`.
 - **On-device models** — Gemma inference, vision prepass, and TTS model loading live in `dsh-android`.
 - **Product templates** — status, key/value, chart, and navigation HSD templates live in `dsh-android`.

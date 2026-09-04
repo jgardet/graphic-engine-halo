@@ -1,5 +1,7 @@
 package halo.engine
 
+import java.io.File
+
 /**
  * Sprite packing interface. The default JVM implementation delegates to the
  * Python companion because robust color quantization is much easier in Python
@@ -28,8 +30,15 @@ interface SpritePacker {
 class PythonSpritePacker(
     private val pythonExe: String = "python",
     private val pythonPath: String? = null,
+    private val allowedSourceRoot: File = File(System.getProperty("user.dir")).canonicalFile,
 ) : SpritePacker {
     override fun pack(src: String, width: Int?, height: Int?, bpp: Int): SpritePacker.Sprite {
+        if (!src.startsWith("data:")) {
+            val source = File(src).canonicalFile
+            require(source.toPath().startsWith(allowedSourceRoot.toPath())) {
+                "Sprite sources must stay inside $allowedSourceRoot"
+            }
+        }
         val args = mutableListOf(
             "-m", "halo_engine.sprite",
             "--src", src,

@@ -32,8 +32,8 @@ This is the *agent-facing* instruction set. It is intentionally familiar: it loo
 | Field | Type | Description |
 |-------|------|-------------|
 | `version` | string | HSD version |
-| `device` | string | `"halo"` or `"frame"` (default `"halo"`) |
-| `mode` | string | `"repl"` (Lua string) or `"runtime"` (HRP binary) |
+| `device` | string | `"halo"` (the only currently supported device) |
+| `mode` | string | `"repl"` for the primary Lua compiler; use `halo_engine.hrp_compile` separately for HRP |
 | `scene.width/height` | int | Logical display size; usually 256×256 |
 | `scene.bg` | color | Background color, rendered with `frame.display.clear()` |
 | `scene.brightness` | int | 0–100 (optional) |
@@ -165,7 +165,7 @@ All elements support:
 | `w`, `h` | int | Target sprite size (optional, derived from image) |
 | `bpp` | int | `1`, `2`, or `4` (default `4`) |
 | `palette_offset` | int | 0–15, added to non-zero indices (default `0`) |
-| `scale_x`, `scale_y` | int | Integer scale, only supported in `repl` (Lua) mode. `runtime` (HRP) mode currently requires both to be `1`. |
+| `scale_x`, `scale_y` | int | Integer scale for the Lua compiler. The separate HRP compiler currently requires both to be `1`. |
 
 Sprites are quantized to ≤16 colors and transmitted as a binary asset, then drawn with `frame.display.bitmap()`.
 
@@ -206,7 +206,7 @@ These are convenience group types that distribute children along an axis.
 | Field | Type | Description |
 |-------|------|-------------|
 | `spacing` | int | Gap between children |
-| `align` | string | `"start"`, `"center"`, `"end"` |
+| `align` | string | Reserved; currently ignored. Use explicit `x`/`y` coordinates for alignment. |
 
 ## Example: running HUD
 
@@ -239,6 +239,11 @@ These are convenience group types that distribute children along an axis.
 
 The engine emits a single Lua string that can be sent to the Halo REPL. This is the fastest to iterate on but has overhead per frame and is limited by Lua string/BLE size.
 
-### `runtime`
+### HRP output
 
-The engine emits a binary **Halo Render Packet** (HRP) to be sent to a small device-side runtime (`lua/he_runtime.lua`). This is more efficient for animations and sprites.
+The primary `halo_engine.compile` compiler currently supports only `repl` mode. To
+produce a binary **Halo Render Packet** (HRP), run
+`python -m halo_engine.hrp_compile <scene>.json --out <file>.hrp`. The payload is
+intended for the device-side runtime (`lua/he_runtime.lua`) and is more efficient
+for animations and sprites. The scene's `mode` field remains `repl` for the shared
+HSD schema.

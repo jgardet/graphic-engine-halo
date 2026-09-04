@@ -9,7 +9,7 @@ package halo.engine.display
  *
  * Dogica font (c) Roberto Mocci, SIL Open Font License 1.1.
  *
- * Ported from `vendor/brilliant_sdk/python/packages/halo_emulator/src/halo_emulator/gfx_fonts.py`.
+ * Ported from the font data exposed by the installed `halo-emulator` package.
  */
 object HaloFonts {
 

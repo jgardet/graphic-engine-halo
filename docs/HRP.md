@@ -43,7 +43,7 @@ Payload lengths are derived from the opcode and fixed/variable fields. Unknown o
 
 ### Stock-compatible
 
-The host sends one or more HRP payloads through `BrilliantMsg.send_message(HRP_CODE, payload)`. An uploaded Lua app uses `data.min.lua` to reassemble the outer message and calls existing `frame.display.*` APIs. No custom firmware is required.
+The host sends one or more HRP payloads through the official data-message framing and existing display APIs. The exact firmware reassembly helper is device/SDK supplied and is not vendored in this repository. No custom firmware is required for the stock-compatible path.
 
 ### Optimized runtime
 

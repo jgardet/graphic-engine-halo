@@ -11,7 +11,16 @@ __pycache__/
 *.pyo
 *.egg-info/
 .pytest_cache/
+.venv/
 *.whl
+
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+*.p12
+*.pfx
+*.pem
 
 # IDEs
 .idea/
