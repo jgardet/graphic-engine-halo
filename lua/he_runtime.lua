@@ -187,7 +187,8 @@ local function execute_hrp(payload)
             require_len(command, 1, 7)
             local sprite = sprites[u16(command, 1)]
             if sprite == nil then error('sprite resource not found') end
-            frame.display.bitmap(u16(command, 3) + 1, u16(command, 5) + 1, sprite.width, sprite.height, 2 ^ sprite.bpp, string.byte(command, 7), sprite.pixel_data, { palette_data = sprite.palette_data })
+            -- frame.display.bitmap signature: (x, y, width, color_format, palette_offset, data, options)
+            frame.display.bitmap(u16(command, 3) + 1, u16(command, 5) + 1, sprite.width, 2 ^ sprite.bpp, string.byte(command, 7), sprite.pixel_data, { palette_data = sprite.palette_data })
         elseif opcode == 0x0C then
             require_len(command, 1, 2)
             sprites[u16(command, 1)] = nil

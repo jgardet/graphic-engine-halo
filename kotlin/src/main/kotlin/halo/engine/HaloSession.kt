@@ -2,15 +2,21 @@ package halo.engine
 
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.selects.select
+import kotlinx.coroutines.withTimeout
+import kotlinx.coroutines.yield
 import java.io.ByteArrayOutputStream
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration
 
 /**
@@ -30,9 +36,14 @@ class HaloLimitException(message: String) : RuntimeException(message)
 class HaloSession(
     private val messages: Flow<HaloMessage>,
     private val send: suspend (Int, ByteArray) -> Unit,
+    private val connectionEvents: Flow<Boolean>? = null,
 ) {
 
-    constructor(transport: HaloBleTransport) : this(transport.messages, transport::sendMessage)
+    constructor(transport: HaloBleTransport) : this(
+        transport.messages,
+        transport::sendMessage,
+        transport.connectionEvents,
+    )
 
     /**
      * Send [requestCode] with [requestPayload], wait up to [timeout] for a single
@@ -52,11 +63,24 @@ class HaloSession(
                 .first()
                 .let { response.complete(it.payload) }
         }
+        val disconnected = connectionEvents?.let {
+            async { it.filter { connected -> !connected }.first() }
+        }
         try {
             send(requestCode, requestPayload)
-            withTimeout(timeout) { response.await() }
+            withTimeout(timeout) {
+                if (disconnected == null) {
+                    response.await()
+                } else {
+                    select {
+                        response.onAwait { it }
+                        disconnected.onAwait { throw HaloTransportException("disconnected during request") }
+                    }
+                }
+            }
         } finally {
             waiter.cancel()
+            disconnected?.cancel()
         }
     }
 
@@ -68,6 +92,11 @@ class HaloSession(
      *
      * If [maxBytes] is exceeded while collecting chunks, the session is aborted
      * and [HaloLimitException] is thrown so the device can be released.
+     *
+     * If [stopAfter] is set, [stopCode] is sent after that duration while
+     * collection continues until [finalCode] arrives or [timeout] elapses. This
+     * is required for microphone captures where the runtime only emits the final
+     * frame after it has stopped recording.
      */
     suspend fun collect(
         startCode: Int,
@@ -78,16 +107,20 @@ class HaloSession(
         finalCode: Int,
         timeout: Duration,
         maxBytes: Long = Long.MAX_VALUE,
+        stopAfter: Duration? = null,
     ): ByteArray = coroutineScope {
         currentCoroutineContext().ensureActive()
         val finalSignal = CompletableDeferred<Unit>()
         val output = ByteArrayOutputStream()
         var written: Long = 0
+        var stopJob: Job? = null
+        val stopSent = AtomicBoolean(false)
 
         val collector = async {
             messages
                 .filter { it.code == chunkCode || it.code == finalCode }
                 .collect { message ->
+                    yield()
                     currentCoroutineContext().ensureActive()
                     when (message.code) {
                         chunkCode -> {
@@ -104,14 +137,41 @@ class HaloSession(
                 }
         }
 
+        val disconnected = connectionEvents?.let {
+            async { it.filter { connected -> !connected }.first() }
+        }
+
         try {
             send(startCode, startPayload)
-            withTimeout(timeout) { finalSignal.await() }
+            if (stopCode != null && stopAfter != null) {
+                stopJob = launch {
+                    delay(stopAfter)
+                    if (!finalSignal.isCompleted && stopSent.compareAndSet(false, true)) {
+                        runCatching { send(stopCode, stopPayload) }
+                    }
+                }
+            }
+            withTimeout(timeout) {
+                if (disconnected == null) {
+                    finalSignal.await()
+                } else {
+                    select {
+                        finalSignal.onAwait {}
+                        disconnected.onAwait { throw HaloTransportException("disconnected during collect") }
+                    }
+                }
+            }
             output.toByteArray()
         } catch (cancelled: CancellationException) {
             throw cancelled
         } finally {
-            stopCode?.let { runCatching { send(it, stopPayload) } }
+            stopJob?.cancel()
+            if (stopCode != null && !stopSent.get() && !finalSignal.isCompleted) {
+                if (stopSent.compareAndSet(false, true)) {
+                    runCatching { send(stopCode, stopPayload) }
+                }
+            }
+            disconnected?.cancel()
             collector.cancel()
         }
     }
