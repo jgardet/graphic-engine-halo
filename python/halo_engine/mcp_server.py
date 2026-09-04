@@ -1,4 +1,4 @@
-"""MCP server for the Halo Graphic Engine.
+"""MCP server for the Halo Engine.
 
 Exposes agent tools to compile HSD scenes to Lua, preview them in the emulator,
 and pack sprites.
@@ -51,7 +51,7 @@ def _validate_scene_assets(value: object) -> None:
 
 server = MCPServer(
     name="halo-engine",
-    title="Halo Graphic Engine",
+    title="Halo Engine",
     description="Compile and preview visuals for Brilliant Labs Halo smart glasses.",
     version="0.1.0",
 )

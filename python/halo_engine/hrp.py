@@ -118,7 +118,6 @@ class HrpBuilder:
         return self.add(SPRITE_DRAW, _u16(sprite_id) + _u16(x) + _u16(y) + bytes((offset,)))
 
     def sprite_release(self, sprite_id: int) -> "HrpBuilder":
-
         return self.add(SPRITE_RELEASE, _u16(sprite_id))
 
     def dirty_region(self, x: int, y: int, w: int, h: int) -> "HrpBuilder":

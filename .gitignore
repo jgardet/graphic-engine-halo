@@ -4,6 +4,7 @@ build/
 .kotlin/
 *.class
 *.jar
+!gradle/wrapper/gradle-wrapper.jar
 
 # Python
 __pycache__/

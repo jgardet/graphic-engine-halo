@@ -5,7 +5,7 @@ import kotlin.test.assertTrue
 import java.io.File
 
 /**
- * S0-03: Architectural dependency checks for graphic-engine-halo (kotlin module).
+ * S0-03: Architectural dependency checks for halo-engine (kotlin module).
  *
  * Verifies that the Halo engine does not import any higher-level
  * agent, application, or product types. The engine must remain
@@ -42,7 +42,7 @@ class EngineDependencyCheckTest {
             }
         }
         assertTrue(violations.isEmpty(),
-            "Forbidden imports found in engine-halo:\n${violations.joinToString("\n")}")
+            "Forbidden imports found in halo-engine:\n${violations.joinToString("\n")}")
     }
 
     private fun walkKotlinFiles(dir: File): List<File> {

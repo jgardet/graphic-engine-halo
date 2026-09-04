@@ -1,4 +1,4 @@
-# Halo Graphic Engine Test Process and Findings
+# Halo Engine Test Process and Findings
 
 ## Purpose
 
